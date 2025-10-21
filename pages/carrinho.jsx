@@ -68,6 +68,13 @@ export default function CarrinhoPage() {
     }, 0);
   }, [itens]);
 
+  const cartCount = useMemo(() => {
+    return (itens || []).reduce(
+      (acc, it) => acc + (Number(it?.quantidade ?? 1) || 1),
+      0
+    );
+  }, [itens]);
+
   const handleLogout = () => {
     clearAuth();
     setUser(null);
@@ -90,7 +97,7 @@ export default function CarrinhoPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <HeaderBar user={user} onLogout={handleLogout} />
+      <HeaderBar user={user} onLogout={handleLogout} cartCount={cartCount} />
 
       <main className="flex-1">
         <div className="w-full max-w-screen-md mx-auto px-3 py-6">

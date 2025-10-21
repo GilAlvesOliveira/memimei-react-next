@@ -159,6 +159,23 @@ export async function getCart({ enrich = true } = {}) {
 }
 
 /**
+ * Contagem total de itens do carrinho (soma das quantidades)
+ */
+export async function getCartCount() {
+  const token = getToken();
+  if (!token) return 0;
+  try {
+    const itens = await getCart({ enrich: false });
+    return (itens || []).reduce(
+      (acc, it) => acc + (Number(it?.quantidade ?? 1) || 1),
+      0
+    );
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * DELETE /api/carrinho/item  (diminui 1 unidade do item no carrinho)
  * Tenta primeiro enviar no body { produtoId, quantidade: 1 }.
  * Se o backend não aceitar body em DELETE, tenta com querystring (?produtoId=...&quantidade=1).
@@ -182,10 +199,7 @@ export async function decrementCartItem(produtoId) {
       data = await res.json();
     } catch (_) {}
     if (res.ok) return data;
-    // Se o servidor não aceitar body, cai para a próxima
-  } catch (_) {
-    // ignora e tenta fallback
-  }
+  } catch (_) {}
 
   // Tentativa 2: DELETE com query string
   const urlQS = `${BASE_URL}/api/carrinho/item?produtoId=${encodeURIComponent(

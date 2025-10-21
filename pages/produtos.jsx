@@ -1,40 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/router";
 import HeaderBar from "../components/HeaderBar";
 import FooterLinks from "../components/FooterLinks";
 import ProductCard from "../components/ProductCard";
-import BrandButton from "../components/BrandButton";
 import brands from "../lib/brands";
-import { getUsuario, getProdutos } from "../services/api";
-import { getStoredUser, getToken, clearAuth } from "../services/storage";
-
-const brandToCategory = { Apple: "Iphone" }; // mapeia Apple -> Iphone (como no backend)
+import { getUsuario, getProdutos, addToCart } from "../services/api";
+import {
+  getStoredUser,
+  getToken,
+  clearAuth,
+  setPostLoginAction,
+} from "../services/storage";
 
 export default function ProdutosPage() {
-  const router = useRouter();
-  const marca = typeof router.query.marca === "string" ? router.query.marca : "";
-  const categoriaAlvo = (brandToCategory[marca] || marca || "").toLowerCase();
-
   const [user, setUser] = useState(null);
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
+  const [okMsg, setOkMsg] = useState("");
 
   useEffect(() => {
     const token = getToken();
     if (!token) {
       setUser(null);
-      return;
+    } else {
+      (async () => {
+        try {
+          const freshUser = await getUsuario();
+          setUser(freshUser);
+        } catch {
+          const local = getStoredUser();
+          setUser(local || null);
+        }
+      })();
     }
-    (async () => {
-      try {
-        const freshUser = await getUsuario();
-        setUser(freshUser);
-      } catch {
-        const local = getStoredUser();
-        setUser(local || null);
-      }
-    })();
   }, []);
 
   useEffect(() => {
@@ -43,6 +41,7 @@ export default function ProdutosPage() {
       try {
         setLoading(true);
         setErro("");
+        setOkMsg("");
         const data = await getProdutos({ signal: abort.signal });
         setLista(data || []);
       } catch (e) {
@@ -56,16 +55,50 @@ export default function ProdutosPage() {
     return () => abort.abort();
   }, []);
 
-  const filtrados = useMemo(() => {
-    if (!categoriaAlvo) return lista;
-    return lista.filter(
-      (p) => String(p.categoria || "").toLowerCase() === categoriaAlvo
-    );
-  }, [lista, categoriaAlvo]);
-
   const handleLogout = () => {
     clearAuth();
     setUser(null);
+  };
+
+  const handleAdd = async (produto) => {
+    const token = getToken();
+    if (!token) {
+      setPostLoginAction({
+        type: "addToCart",
+        data: { produtoId: produto._id, quantidade: 1 },
+        redirect: "/produtos",
+      });
+      window.location.href = "/login";
+      return;
+    }
+    try {
+      setErro("");
+      setOkMsg("");
+      await addToCart({ produtoId: produto._id, quantidade: 1 });
+      setOkMsg("Produto adicionado ao carrinho!");
+    } catch (e) {
+      setErro(e.message || "Falha ao adicionar ao carrinho");
+    }
+  };
+
+  const handleBuy = async (produto) => {
+    const token = getToken();
+    if (!token) {
+      setPostLoginAction({
+        type: "addToCart",
+        data: { produtoId: produto._id, quantidade: 1 },
+        redirect: "/carrinho",
+      });
+      window.location.href = "/login";
+      return;
+    }
+    try {
+      setErro("");
+      await addToCart({ produtoId: produto._id, quantidade: 1 });
+      window.location.href = "/carrinho";
+    } catch (e) {
+      setErro(e.message || "Não foi possível comprar agora");
+    }
   };
 
   return (
@@ -73,43 +106,21 @@ export default function ProdutosPage() {
       <HeaderBar user={user} onLogout={handleLogout} />
 
       <main className="flex-1">
-        {/* Filtros (as mesmas marcas) */}
-        <div className="w-full max-w-screen-md mx-auto px-3 pt-6 space-y-3">
-          <div className="grid grid-cols-1 gap-3">
-            {brands.map((name) => (
-              <BrandButton
-                key={name}
-                label={name}
-                href={`/produtos?marca=${encodeURIComponent(name)}`}
-              />
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <h2 className="text-xl font-bold">
-              {marca ? `Resultados para "${marca}"` : "Todos os produtos"}
-            </h2>
-            <p className="text-slate-600 text-sm">
-              {loading
-                ? "Carregando..."
-                : erro
-                ? erro
-                : `${filtrados.length} item(ns)`}
-            </p>
-          </div>
-        </div>
-
-        {/* Grid de produtos */}
         <div className="w-full max-w-screen-md mx-auto px-3 py-6">
-          {!loading && !erro && filtrados.length === 0 && (
-            <div className="text-center text-slate-600">
-              Nenhum produto encontrado para {marca || "esta seleção"}.
-            </div>
-          )}
+          <h1 className="text-xl font-bold mb-1 text-black">Todos os produtos</h1>
+
+          {loading && <div className="text-center text-black">Carregando…</div>}
+          {erro && !loading && <div className="text-center text-red-700">{erro}</div>}
+          {okMsg && !loading && <div className="text-center text-green-700">{okMsg}</div>}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {filtrados.map((p) => (
-              <ProductCard key={p._id} produto={p} />
+            {lista.map((p) => (
+              <ProductCard
+                key={p._id}
+                produto={p}
+                onAdd={handleAdd}
+                onBuy={handleBuy}
+              />
             ))}
           </div>
         </div>

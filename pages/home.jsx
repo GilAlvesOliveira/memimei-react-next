@@ -4,26 +4,32 @@ import PromoBanner from "../components/PromoBanner";
 import BrandButton from "../components/BrandButton";
 import FooterLinks from "../components/FooterLinks";
 import brands from "../lib/brands";
-import { toSlug } from "../lib/brandMap";
-import { getUsuario } from "../services/api";
+import { getUsuario, getCartCount } from "../services/api";
 import { getStoredUser, getToken, clearAuth } from "../services/storage";
+import { toSlug } from "../lib/brandMap";
 
 export default function HomePage() {
   const [user, setUser] = useState(null);
+  const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
     const token = getToken();
     if (!token) {
       setUser(null);
+      setCartCount(0);
       return;
     }
     (async () => {
       try {
-        const freshUser = await getUsuario();
+        const [freshUser, count] = await Promise.all([
+          getUsuario().catch(() => getStoredUser() || null),
+          getCartCount().catch(() => 0),
+        ]);
         setUser(freshUser);
+        setCartCount(count);
       } catch {
-        const local = getStoredUser();
-        setUser(local || null);
+        setUser(getStoredUser() || null);
+        setCartCount(0);
       }
     })();
   }, []);
@@ -31,11 +37,12 @@ export default function HomePage() {
   const handleLogout = () => {
     clearAuth();
     setUser(null);
+    setCartCount(0);
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <HeaderBar user={user} onLogout={handleLogout} />
+      <HeaderBar user={user} onLogout={handleLogout} cartCount={cartCount} />
 
       <main className="flex-1">
         <PromoBanner />
