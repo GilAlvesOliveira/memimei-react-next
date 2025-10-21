@@ -1,18 +1,33 @@
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/router";
+import { login as apiLogin } from "../services/api";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState("");
 
   const isValidEmail = email.includes("@") && email.includes(".");
   const isValidPass = senha.length > 4;
-  const canSubmit = isValidEmail && isValidPass;
+  const canSubmit = isValidEmail && isValidPass && !loading;
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
-    // sem funcionalidade por enquanto
+
+    try {
+      setLoading(true);
+      setErro("");
+      await apiLogin(email, senha);
+      router.push("/home"); // vai pra Home "logado"
+    } catch (err) {
+      setErro(err.message || "Falha no login");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -79,6 +94,8 @@ export default function LoginPage() {
                 />
               </div>
 
+              {erro && <p className="text-red-300 md:text-white">{erro}</p>}
+
               {/* Botão: mobile laranja | desktop branco; desabilita até validar */}
               <button
                 type="submit"
@@ -91,7 +108,7 @@ export default function LoginPage() {
                 "
                 aria-disabled={!canSubmit}
               >
-                Entrar
+                {loading ? "Entrando..." : "Entrar"}
               </button>
             </form>
 
