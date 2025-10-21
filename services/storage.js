@@ -1,6 +1,7 @@
-// Gerência de auth no localStorage
+// Gerência de auth e ações pós-login no localStorage
 const TOKEN_KEY = "token";
 const USER_KEY = "usuario";
+const POST_LOGIN_ACTION_KEY = "postLoginAction";
 
 export function setAuth({ token, usuario }) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
@@ -26,4 +27,27 @@ export function clearAuth() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+}
+
+// ===== Ações pós-login (ex.: adicionar ao carrinho, redirecionar) =====
+export function setPostLoginAction(action) {
+  // action: { type: 'addToCart', data: { produtoId, quantidade }, redirect: '/rota' }
+  // action: { type: 'redirect', redirect: '/rota' }
+  if (typeof window === "undefined") return;
+  localStorage.setItem(POST_LOGIN_ACTION_KEY, JSON.stringify(action));
+}
+
+export function getPostLoginAction() {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(POST_LOGIN_ACTION_KEY);
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPostLoginAction() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(POST_LOGIN_ACTION_KEY);
 }

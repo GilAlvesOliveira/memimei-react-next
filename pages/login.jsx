@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/router";
-import { login as apiLogin } from "../services/api";
+import { login as apiLogin, addToCart } from "../services/api";
+import { getPostLoginAction, clearPostLoginAction } from "../services/storage";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,7 +23,28 @@ export default function LoginPage() {
       setLoading(true);
       setErro("");
       await apiLogin(email, senha);
-      router.push("/home"); // vai pra Home "logado"
+
+      // Verifica se existe ação pós-login
+      const action = getPostLoginAction();
+      if (action) {
+        if (action.type === "addToCart" && action?.data?.produtoId) {
+          try {
+            await addToCart({
+              produtoId: action.data.produtoId,
+              quantidade: action.data.quantidade || 1,
+            });
+          } catch (e) {
+            // opcional: tratar erro específico da ação pós-login
+          }
+        }
+        const dest = action.redirect || "/home";
+        clearPostLoginAction();
+        router.push(dest);
+        return;
+      }
+
+      // Sem ação pendente → vai pra Home
+      router.push("/home");
     } catch (err) {
       setErro(err.message || "Falha no login");
     } finally {
@@ -35,13 +57,16 @@ export default function LoginPage() {
     <main className="min-h-screen bg-black">
       {/* Container: mobile 1 coluna | desktop 2 colunas */}
       <div className="max-w-6xl mx-auto min-h-screen grid grid-cols-1 md:grid-cols-2 md:gap-8">
-        {/* LOGO — MOBILE: em cima | DESKTOP: à direita com fundo preto */}
+        {/* LOGO — MOBILE: em cima | DESKTOP: à direita com fundo preto — agora linka para /home */}
         <section className="order-1 md:order-2 flex items-center justify-center p-6 md:p-10 bg-black">
-          <img
-            src="/imagens/LogoMeMimei.png"
-            alt="Logo Memimei"
-            className="h-28 w-auto md:h-64 lg:h-72"
-          />
+          <Link href="/home" aria-label="Ir para a Home">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/imagens/LogoMeMimei.png"
+              alt="Logo Memimei"
+              className="h-28 w-auto md:h-64 lg:h-72 cursor-pointer"
+            />
+          </Link>
         </section>
 
         {/* FORM — MOBILE: embaixo (fundo preto) | DESKTOP: à esquerda (fundo laranja) */}

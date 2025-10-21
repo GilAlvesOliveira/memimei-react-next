@@ -4,6 +4,7 @@ import PromoBanner from "../components/PromoBanner";
 import BrandButton from "../components/BrandButton";
 import FooterLinks from "../components/FooterLinks";
 import brands from "../lib/brands";
+import { toSlug } from "../lib/brandMap";
 import { getUsuario } from "../services/api";
 import { getStoredUser, getToken, clearAuth } from "../services/storage";
 
@@ -30,7 +31,6 @@ export default function HomePage() {
   const handleLogout = () => {
     clearAuth();
     setUser(null);
-    // opcional: window.location.href = "/home";
   };
 
   return (
@@ -41,7 +41,11 @@ export default function HomePage() {
         <PromoBanner />
         <div className="w-full max-w-screen-md mx-auto px-3 py-6 space-y-3">
           {brands.map((name) => (
-            <BrandButton key={name} label={name} />
+            <BrandButton
+              key={name}
+              label={name}
+              href={`/produtos/${toSlug(name)}`}
+            />
           ))}
         </div>
       </main>
