@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import HeaderBar from "../components/HeaderBar";
 import FooterLinks from "../components/FooterLinks";
@@ -8,6 +8,7 @@ import {
   decrementCartItem,
   createOrder,
   createPreference,
+  getPedidos, // <-- vamos usar para fazer o polling do status
 } from "../services/api";
 import {
   getStoredUser,
@@ -23,8 +24,16 @@ export default function CarrinhoPage() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [busyId, setBusyId] = useState(null);
+
   const [finalizando, setFinalizando] = useState(false);
-  const [info, setInfo] = useState("");
+
+  // Estados da “espera de pagamento” (polling)
+  const [waitingPay, setWaitingPay] = useState(false);
+  const [pedidoId, setPedidoId] = useState(null);
+  const [pollMsg, setPollMsg] = useState("");
+  const [pollErr, setPollErr] = useState("");
+  const [pollCount, setPollCount] = useState(0);
+  const pollTimer = useRef(null);
 
   useEffect(() => {
     const token = getToken();
@@ -48,6 +57,13 @@ export default function CarrinhoPage() {
         setErro(e.message || "Erro ao carregar carrinho");
       }
     })();
+
+    return () => {
+      if (pollTimer.current) {
+        clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -82,6 +98,8 @@ export default function CarrinhoPage() {
   const handleLogout = () => {
     clearAuth();
     setUser(null);
+    // após sair, manda pra tela de login (pedido do cliente)
+    router.push("/login");
   };
 
   async function handleDecrement(item) {
@@ -99,30 +117,82 @@ export default function CarrinhoPage() {
     }
   }
 
+  // ==== POLLING DO STATUS DO PEDIDO ====
+  function startPollingStatus(pedidoIdCriado) {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+    setPollErr("");
+    setPollMsg("Abrimos o Mercado Pago em uma nova aba. Conclua o pagamento e volte aqui — estamos monitorando automaticamente.");
+    setPollCount(0);
+    setWaitingPay(true);
+
+    const MAX_ATTEMPTS = 36; // ~3 minutos (36 × 5s)
+    pollTimer.current = setInterval(async () => {
+      try {
+        setPollCount((x) => x + 1);
+        const pedidos = await getPedidos();
+        const achado = (pedidos || []).find((p) => {
+          const idStr =
+            (p?._id && (p._id.$oid || p._id)) || p?._id || "";
+          return String(idStr) === String(pedidoIdCriado);
+        });
+
+        if (achado && String(achado.status).toLowerCase() === "aprovado") {
+          clearInterval(pollTimer.current);
+          pollTimer.current = null;
+          setPollMsg("Pagamento aprovado! Redirecionando…");
+          setWaitingPay(false);
+          router.push(`/sucesso?pedido=${encodeURIComponent(pedidoIdCriado)}`);
+          return;
+        }
+      } catch (e) {
+        // ignora erros intermitentes de rede
+      }
+
+      // timeout do polling
+      setPollCount((prev) => {
+        if (prev + 1 >= MAX_ATTEMPTS) {
+          if (pollTimer.current) {
+            clearInterval(pollTimer.current);
+            pollTimer.current = null;
+          }
+          setWaitingPay(false);
+          setPollErr(
+            "Ainda não confirmamos seu pagamento. Se você já pagou, aguarde alguns instantes ou verifique em 'Meus pedidos'."
+          );
+        }
+        return prev + 1;
+      });
+    }, 5000);
+  }
+
   async function handleCheckout() {
     try {
       setErro("");
-      setInfo("");
+      setPollErr("");
+      setPollMsg("");
       setFinalizando(true);
 
       // 1) Cria o pedido (o backend JÁ LIMPA o carrinho)
-      const { pedidoId, total: totalPedido } = await createOrder();
+      const { pedidoId: idGerado, total: totalPedido } = await createOrder();
+      setPedidoId(idGerado);
+      setItens([]); // reflete o esvaziamento do carrinho imediatamente
 
-      // 2) Cria a preferência no MP e redireciona
+      // 2) Cria a preferência no MP
       const pref = await createPreference({
-        pedidoId,
+        pedidoId: idGerado,
         total: totalPedido || total,
       });
 
-      // Observação: caso o pagamento falhe, o carrinho permanecerá vazio
-      // pois o backend limpa na criação do pedido.
-      window.location.href = pref.initPoint;
+      // 3) Abre o Mercado Pago em NOVA ABA
+      window.open(pref.initPoint, "_blank", "noopener");
+
+      // 4) Começa a monitorar o status do pedido na aba atual
+      startPollingStatus(idGerado);
     } catch (e) {
       setErro(e.message || "Não foi possível iniciar o pagamento");
-      setInfo(
-        "Se o erro persistir, tente novamente mais tarde. Obs.: seu carrinho pode ter sido esvaziado ao criar o pedido."
-      );
-      await carregarCarrinho();
     } finally {
       setFinalizando(false);
     }
@@ -138,12 +208,24 @@ export default function CarrinhoPage() {
 
           {loading && <div className="text-center text-black">Carregando…</div>}
           {erro && !loading && <div className="text-center text-red-700">{erro}</div>}
-          {info && !loading && <div className="text-center text-slate-700">{info}</div>}
 
-          {!loading && !erro && itens.length === 0 && (
+          {/* Avisos do fluxo de pagamento */}
+          {pollMsg && (
+            <div className="mb-4 p-3 rounded-lg bg-orange-50 border border-orange-400 text-black">
+              {pollMsg}
+            </div>
+          )}
+          {pollErr && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-400 text-red-700">
+              {pollErr}
+            </div>
+          )}
+
+          {!loading && !erro && itens.length === 0 && !waitingPay && (
             <div className="text-center text-black">Seu carrinho está vazio.</div>
           )}
 
+          {/* Lista de itens */}
           <div className="grid grid-cols-1 gap-3">
             {itens.map((item, idx) => {
               const produto = item?.produto || {};
@@ -202,7 +284,7 @@ export default function CarrinhoPage() {
                         <button
                           type="button"
                           onClick={() => handleDecrement(item)}
-                          disabled={busyId === pid}
+                          disabled={busyId === pid || waitingPay}
                           className="ml-2 px-3 py-1 rounded-lg border border-black text-black hover:bg-black hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                           aria-label="Diminuir quantidade em 1"
                           title="Diminuir quantidade em 1"
@@ -221,7 +303,8 @@ export default function CarrinhoPage() {
             })}
           </div>
 
-          {!loading && !erro && itens.length > 0 && (
+          {/* Total + CTA */}
+          {!loading && !erro && (itens.length > 0 || waitingPay) && (
             <div className="mt-6 flex items-center justify-between">
               <div className="text-lg font-bold text-black">
                 Total:{" "}
@@ -234,10 +317,14 @@ export default function CarrinhoPage() {
               <button
                 type="button"
                 onClick={handleCheckout}
-                disabled={finalizando}
+                disabled={finalizando || waitingPay}
                 className="px-4 py-2 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {finalizando ? "Redirecionando..." : "Finalizar compra"}
+                {finalizando
+                  ? "Gerando pagamento…"
+                  : waitingPay
+                  ? "Aguardando confirmação…"
+                  : "Finalizar compra"}
               </button>
             </div>
           )}
