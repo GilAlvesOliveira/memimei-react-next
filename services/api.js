@@ -44,6 +44,23 @@ export async function getUsuario() {
   return handle(res);
 }
 
+/** Atualiza nome e/ou avatar do usuário logado (PUT /api/usuario/usuario) */
+export async function updateUsuario({ nome, file }) {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+
+  const fd = new FormData();
+  if (typeof nome === "string") fd.set("nome", nome);
+  if (file) fd.set("file", file);
+
+  const res = await fetch(buildUrl("/api/usuario/usuario"), {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` }, // não setar Content-Type manualmente
+    body: fd,
+  });
+  return handle(res); // { msg: 'Usuário atualizado com sucesso' }
+}
+
 /* ========== PRODUTOS ========== */
 export async function getProdutos({ signal } = {}) {
   const res = await fetch(buildUrl("/api/products/produtos"), { signal });

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export default function HeaderBar({
-  user,            // { nome, avatar, role }
+  user,            // { nome, avatar, role, email }
   onLogout,
   cartCount = 0,
   logoSrc = "/imagens/LogoMeMimei.png",
@@ -74,25 +74,18 @@ export default function HeaderBar({
               )}
             </Link>
 
-            {/* Meus Pedidos */}
-            <Link
-              href="/pedidos"
-              className="px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
-              aria-label="Meus pedidos"
-            >
-              Pedidos
+            {/* Avatar + Nome -> Perfil */}
+            <Link href="/perfil" className="flex items-center gap-2 sm:gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={avatarSrc}
+                alt={user?.nome || "Usuário"}
+                className="h-10 w-10 sm:h-14 sm:w-14 rounded-full object-cover cursor-pointer"
+              />
+              <span className="text-sm sm:text-base font-semibold truncate max-w-[28vw] sm:max-w-[20rem]">
+                {user?.nome || "Usuário"}
+              </span>
             </Link>
-
-            {/* Avatar + Nome */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={avatarSrc}
-              alt={user?.nome || "Usuário"}
-              className="h-10 w-10 sm:h-14 sm:w-14 rounded-full object-cover"
-            />
-            <span className="text-sm sm:text-base font-semibold truncate max-w-[28vw] sm:max-w-[20rem]">
-              {user?.nome || "Usuário"}
-            </span>
 
             {/* Sair */}
             <button
