@@ -2,189 +2,153 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import HeaderBar from "../components/HeaderBar";
 import FooterLinks from "../components/FooterLinks";
-import { getUsuario, updateUsuario } from "../services/api";
-import { getToken, getStoredUser, clearAuth, setPostLoginAction, setAuth } from "../services/storage";
+import { getUsuario, getCartCount } from "../services/api";
+import { getStoredUser, getToken, clearAuth } from "../services/storage";
 
 export default function PerfilPage() {
   const router = useRouter();
-
   const [user, setUser] = useState(null);
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState("");
-  const [avatar, setAvatar] = useState("");        // URL atual
-  const [file, setFile] = useState(null);          // novo arquivo
-  const [preview, setPreview] = useState("");      // preview do novo arquivo
+  const [cartCount, setCartCount] = useState(0);
 
-  const [saving, setSaving] = useState(false);
+  const [nome, setNome] = useState("");
+  const [file, setFile] = useState(null);
+  const [telefone, setTelefone] = useState(""); // novo (opcional)
+  const [endereco, setEndereco] = useState(""); // novo (opcional)
+
+  const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState("");
 
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      setPostLoginAction({ type: "redirect", redirect: "/perfil" });
       router.replace("/login");
       return;
     }
     (async () => {
       try {
-        setErro("");
-        const u = await getUsuario().catch(() => getStoredUser() || null);
-        if (!u) throw new Error("Não foi possível carregar o usuário");
-        setUser(u);
-        setNome(u.nome || "");
-        setEmail(u.email || "");
-        setRole((u.role || "").toLowerCase());
-        setAvatar(u.avatar || "");
+        setLoading(true);
+        const [freshUser, count] = await Promise.all([
+          getUsuario().catch(() => getStoredUser() || null),
+          getCartCount().catch(() => 0),
+        ]);
+        setUser(freshUser);
+        setCartCount(count);
+        setNome(freshUser?.nome || "");
+        // se backend já devolver:
+        setTelefone(freshUser?.telefone || "");
+        setEndereco(freshUser?.endereco || "");
       } catch (e) {
-        setErro(e.message || "Erro ao carregar usuário");
+        setErro(e.message || "Erro ao carregar perfil");
+      } finally {
+        setLoading(false);
       }
     })();
   }, [router]);
 
-  function onSelectFile(e) {
-    const f = e.target.files?.[0] || null;
-    setFile(f);
-    if (f) {
-      const url = URL.createObjectURL(f);
-      setPreview(url);
-    } else {
-      setPreview("");
-    }
-  }
-
-  const canSave = !saving && (file || (nome && nome.length >= 2 && nome !== (user?.nome || "")));
-
-  async function onSubmit(e) {
-    e.preventDefault();
-    if (!canSave) return;
-
-    try {
-      setSaving(true);
-      setErro("");
-      setOk("");
-
-      await updateUsuario({ nome, file });
-
-      // Recarrega o usuário atualizado para refletir no header/localStorage
-      const updated = await getUsuario();
-      const token = getToken();
-      setAuth({ token, usuario: updated }); // mantém o mesmo token, atualiza o user
-
-      setUser(updated);
-      setAvatar(updated.avatar || "");
-      setPreview("");
-      setFile(null);
-      setOk("Perfil atualizado com sucesso!");
-    } catch (e) {
-      setErro(e.message || "Não foi possível atualizar o perfil");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const handleLogout = () => {
     clearAuth();
     setUser(null);
+    setCartCount(0);
     router.push("/home");
   };
 
-  const avatarToShow = preview || avatar || "/imagens/usuarioLaranja.png";
+  async function handleSubmit(e) {
+    e.preventDefault();
+    try {
+      setSalvando(true);
+      setErro("");
+      setOk("");
+
+      const token = getToken();
+      if (!token) throw new Error("Sem token");
+
+      const fd = new FormData();
+      if (nome) fd.set("nome", nome);
+      if (file) fd.set("file", file);
+      // estes só serão salvos se o backend aceitar (Opção B):
+      if (telefone) fd.set("telefone", telefone);
+      if (endereco) fd.set("endereco", endereco);
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/usuario/usuario`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.erro || "Erro ao atualizar perfil");
+
+      setOk("Perfil atualizado!");
+    } catch (e) {
+      setErro(e.message || "Erro ao salvar");
+    } finally {
+      setSalvando(false);
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <HeaderBar user={user} onLogout={handleLogout} />
+      <HeaderBar user={user} onLogout={handleLogout} cartCount={cartCount} />
 
       <main className="flex-1">
-        <div className="w-full max-w-screen-sm mx-auto px-4 py-6">
+        <div className="w-full max-w-screen-sm mx-auto px-3 py-6">
           <h1 className="text-2xl font-bold text-black mb-4">Meu Perfil</h1>
 
-          {erro && <div className="mb-3 text-red-700">{erro}</div>}
-          {ok && <div className="mb-3 text-green-700">{ok}</div>}
+          {loading && <div className="text-black">Carregando…</div>}
+          {erro && <div className="text-red-700">{erro}</div>}
+          {ok && <div className="text-green-700">{ok}</div>}
 
-          {!user ? (
-            <div className="text-black">Carregando…</div>
-          ) : (
-            <form onSubmit={onSubmit} className="space-y-5">
-              {/* Avatar */}
-              <div className="flex items-center gap-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarToShow}
-                  alt={nome || "Usuário"}
-                  className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover border"
-                />
-                <div>
-                  <label className="block text-sm font-semibold text-black mb-1">
-                    Foto de perfil
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={onSelectFile}
-                    className="block text-sm text-black"
-                  />
-                  <p className="text-xs text-slate-700 mt-1">
-                    PNG/JPG/JPEG. Opcional.
-                  </p>
-                </div>
-              </div>
-
-              {/* Nome */}
+          {!loading && (
+            <form onSubmit={handleSubmit} className="space-y-4 bg-white p-4 border rounded-xl">
               <div>
-                <label htmlFor="nome" className="block text-sm font-semibold text-black">
-                  Nome
-                </label>
+                <label className="block text-sm font-semibold text-black mb-1">Nome</label>
                 <input
-                  id="nome"
-                  type="text"
+                  className="w-full p-3 border border-orange-500 rounded-md text-orange-600"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  className="w-full p-3 mt-1 border border-orange-500 rounded-md text-orange-600"
-                  placeholder="Seu nome"
                   required
                 />
-                <p className="text-xs text-slate-700 mt-1">
-                  Mínimo 2 caracteres.
-                </p>
               </div>
 
-              {/* Email (somente leitura) */}
               <div>
-                <label className="block text-sm font-semibold text-black">
-                  E-mail (não editável)
-                </label>
+                <label className="block text-sm font-semibold text-black mb-1">Foto (opcional)</label>
                 <input
-                  type="email"
-                  value={email}
-                  disabled
-                  className="w-full p-3 mt-1 border border-slate-300 rounded-md bg-slate-100 text-black"
-                  readOnly
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="w-full p-3 border border-orange-500 rounded-md text-orange-600"
                 />
               </div>
 
-              {/* Tipo de usuário (somente leitura) */}
               <div>
-                <label className="block text-sm font-semibold text-black">
-                  Tipo de usuário
-                </label>
+                <label className="block text-sm font-semibold text-black mb-1">WhatsApp (opcional)</label>
                 <input
-                  type="text"
-                  value={role === "admin" ? "Admin" : "Cliente"}
-                  disabled
-                  className="w-full p-3 mt-1 border border-slate-300 rounded-md bg-slate-100 text-black"
-                  readOnly
+                  placeholder="(11) 91234-5678"
+                  className="w-full p-3 border border-orange-500 rounded-md text-orange-600"
+                  value={telefone}
+                  onChange={(e) => setTelefone(e.target.value)}
                 />
               </div>
 
-              <div className="pt-2">
+              <div>
+                <label className="block text-sm font-semibold text-black mb-1">Endereço (opcional)</label>
+                <textarea
+                  placeholder="Rua, número, bairro, cidade/UF, CEP"
+                  className="w-full p-3 border border-orange-500 rounded-md text-orange-600"
+                  rows={3}
+                  value={endereco}
+                  onChange={(e) => setEndereco(e.target.value)}
+                />
+              </div>
+
+              <div>
                 <button
                   type="submit"
-                  disabled={!canSave}
-                  className="px-4 py-2 rounded-lg bg-black text-white font-semibold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={salvando}
+                  className="w-full p-3 mt-2 bg-black text-white font-semibold rounded-md disabled:opacity-50"
                 >
-                  {saving ? "Salvando..." : "Salvar alterações"}
+                  {salvando ? "Salvando..." : "Salvar alterações"}
                 </button>
               </div>
             </form>

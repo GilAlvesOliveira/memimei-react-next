@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export default function HeaderBar({
-  user,            // { nome, avatar, role, email }
+  user,            // { nome, avatar, role }
   onLogout,
   cartCount = 0,
   logoSrc = "/imagens/LogoMeMimei.png",
@@ -33,17 +33,6 @@ export default function HeaderBar({
       <div className="flex items-center gap-2 sm:gap-3 mr-4 sm:mr-[10%]">
         {isLogged ? (
           <>
-            {/* Link Admin (apenas admin) */}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
-                aria-label="Painel administrativo"
-              >
-                Admin
-              </Link>
-            )}
-
             {/* Carrinho + badge */}
             <Link
               href="/carrinho"
@@ -73,6 +62,25 @@ export default function HeaderBar({
                 </span>
               )}
             </Link>
+
+            {/* Link Admin (apenas admin) ou Pedidos (cliente) */}
+            {isAdmin ? (
+              <Link
+                href="/admin"
+                className="px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
+                aria-label="Painel administrativo"
+              >
+                Admin
+              </Link>
+            ) : (
+              <Link
+                href="/pedidos"
+                className="px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
+                aria-label="Ver meus pedidos"
+              >
+                Pedidos
+              </Link>
+            )}
 
             {/* Avatar + Nome -> Perfil */}
             <Link href="/perfil" className="flex items-center gap-2 sm:gap-3">

@@ -1,36 +1,16 @@
-// services/api.js
 import { getToken, setAuth } from "./storage";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
-/** Monta a URL da API. Se BASE_URL não existir, usa a própria origem (rotas /api do Next) */
-const buildUrl = (path) => (BASE_URL ? `${BASE_URL}${path}` : path);
-
-async function readJson(res) {
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return res.json();
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { erro: text || "Erro inesperado do servidor" };
-  }
-}
-
-async function handle(res) {
-  const data = await readJson(res);
-  if (!res.ok) throw new Error(data?.erro || "Erro na requisição");
-  return data;
-}
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 /* ========== AUTH ========== */
 export async function login(email, senha) {
-  const res = await fetch(buildUrl("/api/auth/login"), {
+  const res = await fetch(`${BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, senha }),
   });
-  const data = await handle(res); // { msg, token, usuario }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Falha no login");
   setAuth({ token: data.token, usuario: data.usuario });
   return data;
 }
@@ -38,41 +18,29 @@ export async function login(email, senha) {
 export async function getUsuario() {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-  const res = await fetch(buildUrl("/api/usuario/usuario"), {
+  const res = await fetch(`${BASE_URL}/api/usuario/usuario`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  return handle(res);
-}
-
-/** Atualiza nome e/ou avatar do usuário logado (PUT /api/usuario/usuario) */
-export async function updateUsuario({ nome, file }) {
-  const token = getToken();
-  if (!token) throw new Error("Sem token");
-
-  const fd = new FormData();
-  if (typeof nome === "string") fd.set("nome", nome);
-  if (file) fd.set("file", file);
-
-  const res = await fetch(buildUrl("/api/usuario/usuario"), {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}` }, // não setar Content-Type manualmente
-    body: fd,
-  });
-  return handle(res); // { msg: 'Usuário atualizado com sucesso' }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao obter usuário");
+  return data;
 }
 
 /* ========== PRODUTOS ========== */
 export async function getProdutos({ signal } = {}) {
-  const res = await fetch(buildUrl("/api/products/produtos"), { signal });
-  return handle(res);
+  const res = await fetch(`${BASE_URL}/api/products/produtos`, { signal });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao obter produtos");
+  return data;
 }
 
 export async function searchProdutos(term, { signal } = {}) {
-  const url = `${buildUrl("/api/products/busca")}?q=${encodeURIComponent(
-    term || ""
-  )}`;
-  const res = await fetch(url, { signal });
-  return handle(res);
+  const url = new URL(`${BASE_URL}/api/products/busca`);
+  url.searchParams.set("q", term);
+  const res = await fetch(url.toString(), { signal });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro na busca");
+  return data;
 }
 
 /* ========== CARRINHO ========== */
@@ -90,7 +58,7 @@ function toId(val) {
 export async function addToCart({ produtoId, quantidade = 1 }) {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-  const res = await fetch(buildUrl("/api/carrinho/carrinho"), {
+  const res = await fetch(`${BASE_URL}/api/carrinho/carrinho`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -98,18 +66,23 @@ export async function addToCart({ produtoId, quantidade = 1 }) {
     },
     body: JSON.stringify({ produtoId, quantidade }),
   });
-  return handle(res);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao adicionar ao carrinho");
+  return data;
 }
 
+/** GET carrinho do backend: { produtos: [ ...produto, quantidade ] } */
 export async function getCart() {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-  const res = await fetch(buildUrl("/api/carrinho/carrinho"), {
+  const res = await fetch(`${BASE_URL}/api/carrinho/carrinho`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const payload = await handle(res);
+  const payload = await res.json();
+  if (!res.ok) throw new Error(payload?.erro || "Erro ao obter carrinho");
 
   const arr = Array.isArray(payload?.produtos) ? payload.produtos : [];
+  // Normaliza para: { produtoId, quantidade, produto, preco }
   return arr.map((p) => {
     const pid = toId(p?._id) || toId(p?.produtoId);
     const preco = Number(p?.preco ?? 0) || 0;
@@ -137,32 +110,42 @@ export async function getCartCount() {
 export async function decrementCartItem(produtoId) {
   if (!produtoId) throw new Error("produtoId obrigatório");
   const token = getToken();
-  const headers = { "Content-Type": "application/json" };
+  const headers = {
+    "Content-Type": "application/json",
+  };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(buildUrl("/api/carrinho/item"), {
+  const res = await fetch(`${BASE_URL}/api/carrinho/item`, {
     method: "DELETE",
     headers,
     body: JSON.stringify({ produtoId }),
   });
-  return handle(res);
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (_) {}
+  if (!res.ok) throw new Error(data?.erro || "Erro ao diminuir a quantidade");
+  return data;
 }
 
 /* ========== PEDIDOS + MERCADO PAGO ========== */
 export async function createOrder() {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-  const res = await fetch(buildUrl("/api/pedidos/pedidos"), {
+  const res = await fetch(`${BASE_URL}/api/pedidos/pedidos`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
-  return handle(res); // { msg, pedidoId, total }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao criar pedido");
+  // data = { msg, pedidoId, total }
+  return data;
 }
 
 export async function createPreference({ pedidoId, total }) {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-  const res = await fetch(buildUrl("/api/mercado_pago/preference"), {
+  const res = await fetch(`${BASE_URL}/api/mercado_pago/preference`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -170,16 +153,21 @@ export async function createPreference({ pedidoId, total }) {
     },
     body: JSON.stringify({ pedidoId, total }),
   });
-  return handle(res); // { initPoint, preferenceId }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao criar preferência");
+  // { initPoint, preferenceId }
+  return data;
 }
 
 export async function getPedidos() {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-  const res = await fetch(buildUrl("/api/pedidos/pedidos"), {
+  const res = await fetch(`${BASE_URL}/api/pedidos/pedidos`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  return handle(res); // array
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao listar pedidos");
+  return data; // array
 }
 
 /* ========== ADMIN PRODUTOS ========== */
@@ -191,11 +179,10 @@ export async function adminCreateProduto({
   categoria,
   cor,
   modelo,
-  file,
+  file, // File | Blob opcional
 }) {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-
   const fd = new FormData();
   fd.set("nome", nome);
   fd.set("descricao", descricao);
@@ -206,23 +193,41 @@ export async function adminCreateProduto({
   fd.set("modelo", modelo);
   if (file) fd.set("file", file);
 
-  const res = await fetch(buildUrl("/api/products/produtos"), {
+  const res = await fetch(`${BASE_URL}/api/products/produtos`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` }, // não setar Content-Type manualmente
+    headers: { Authorization: `Bearer ${token}` }, // NÃO definir Content-Type; o browser seta boundary
     body: fd,
   });
-  return handle(res);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.erro || "Erro ao criar produto");
+  return data;
 }
 
 export async function adminDeleteProduto(id) {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-  const url = `${buildUrl("/api/products/produtos")}?_id=${encodeURIComponent(
-    id
-  )}`;
+  const url = `${BASE_URL}/api/products/produtos?_id=${encodeURIComponent(id)}`;
   const res = await fetch(url, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  return handle(res);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.erro || "Erro ao excluir produto");
+  return data;
+}
+
+/* ========== ADMIN: USUÁRIOS (para resolver nomes por id) ========== */
+export async function adminGetUsersByIds(ids = []) {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  const url = new URL(`${BASE_URL}/api/admin/usuarios`);
+  if (Array.isArray(ids) && ids.length) {
+    url.searchParams.set("ids", ids.join(","));
+  }
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.erro || "Erro ao obter usuários");
+  return data; // [{ _id, nome, email, avatar }]
 }
