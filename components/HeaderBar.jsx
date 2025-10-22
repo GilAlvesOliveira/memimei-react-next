@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { useRouter } from "next/router";
-import { clearAuth } from "../services/storage";
 
 export default function HeaderBar({
   user,            // { nome, avatar, role }
@@ -10,7 +8,6 @@ export default function HeaderBar({
   userIconSrc = "/imagens/usuarioCinza.png",
   avatarFallback = "/imagens/usuarioLaranja.png",
 }) {
-  const router = useRouter();
   const isLogged = !!user;
   const isAdmin = isLogged && String(user?.role || "").toLowerCase() === "admin";
 
@@ -18,21 +15,6 @@ export default function HeaderBar({
     isLogged && user?.avatar && String(user.avatar).trim()
       ? user.avatar
       : avatarFallback;
-
-  // Sempre redireciona para /login ao sair, independente da tela atual
-  async function handleClickSair() {
-    try {
-      if (onLogout) {
-        // deixa a página limpar estados locais (ex.: setUser(null), etc.)
-        await Promise.resolve(onLogout());
-      } else {
-        // fallback seguro, caso algum lugar não passe onLogout
-        clearAuth();
-      }
-    } finally {
-      router.replace("/login"); // replace evita voltar com "voltar" do navegador
-    }
-  }
 
   return (
     <header className="h-[20vh] flex items-center justify-between bg-black text-white">
@@ -59,6 +41,17 @@ export default function HeaderBar({
                 aria-label="Painel administrativo"
               >
                 Admin
+              </Link>
+            )}
+
+            {/* Link Meus Pedidos (somente cliente comum, mas pode mostrar para todos logados se preferir) */}
+            {!isAdmin && (
+              <Link
+                href="/pedidos"
+                className="px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
+                aria-label="Meus pedidos"
+              >
+                Pedidos
               </Link>
             )}
 
@@ -92,8 +85,8 @@ export default function HeaderBar({
               )}
             </Link>
 
-            {/* Avatar + Nome → linkam para /perfil */}
-            <Link href="/perfil" className="flex items-center gap-2">
+            {/* Avatar + Nome (clicável para perfil) */}
+            <Link href="/perfil" className="flex items-center gap-2" aria-label="Meu perfil">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={avatarSrc}
@@ -108,7 +101,7 @@ export default function HeaderBar({
             {/* Sair */}
             <button
               type="button"
-              onClick={handleClickSair}
+              onClick={onLogout}
               className="ml-1 px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
               aria-label="Sair da conta"
             >

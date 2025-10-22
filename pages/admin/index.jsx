@@ -64,7 +64,7 @@ export default function AdminDashboardPage() {
               >
                 <h2 className="text-lg font-semibold text-black">Pedidos</h2>
                 <p className="text-sm text-slate-700">
-                  Acompanhe os pedidos realizados (em construção).
+                  Acompanhe os pedidos realizados.
                 </p>
               </Link>
 
