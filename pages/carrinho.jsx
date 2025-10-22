@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import HeaderBar from "../components/HeaderBar";
 import FooterLinks from "../components/FooterLinks";
-import { getUsuario, getCart, decrementCartItem } from "../services/api";
+import {
+  getUsuario,
+  getCart,
+  decrementCartItem,
+  createOrder,
+  createPreference,
+} from "../services/api";
 import {
   getStoredUser,
   getToken,
@@ -13,12 +19,13 @@ import {
 export default function CarrinhoPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
-  const [itens, setItens] = useState([]); // [{ produtoId, quantidade, produto, preco }]
+  const [itens, setItens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
-  const [busyId, setBusyId] = useState(null); // produtoId em atualização
+  const [busyId, setBusyId] = useState(null);
+  const [finalizando, setFinalizando] = useState(false);
+  const [info, setInfo] = useState("");
 
-  // Exige login: se não tiver token → manda pro login e volta depois
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -29,7 +36,6 @@ export default function CarrinhoPage() {
 
     (async () => {
       try {
-        // Carregar usuário para Header
         try {
           const freshUser = await getUsuario();
           setUser(freshUser);
@@ -37,8 +43,6 @@ export default function CarrinhoPage() {
           const local = getStoredUser();
           setUser(local || null);
         }
-
-        // Carregar carrinho
         await carregarCarrinho();
       } catch (e) {
         setErro(e.message || "Erro ao carregar carrinho");
@@ -51,7 +55,7 @@ export default function CarrinhoPage() {
     try {
       setLoading(true);
       setErro("");
-      const data = await getCart({ enrich: true });
+      const data = await getCart();
       setItens(Array.isArray(data) ? data : []);
     } catch (e) {
       setErro(e.message || "Erro ao carregar carrinho");
@@ -87,11 +91,40 @@ export default function CarrinhoPage() {
     try {
       setBusyId(produtoId);
       await decrementCartItem(produtoId);
-      await carregarCarrinho(); // refaz o GET pra atualizar quantidades/itens
+      await carregarCarrinho();
     } catch (e) {
       setErro(e.message || "Não foi possível diminuir a quantidade");
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleCheckout() {
+    try {
+      setErro("");
+      setInfo("");
+      setFinalizando(true);
+
+      // 1) Cria o pedido (o backend JÁ LIMPA o carrinho)
+      const { pedidoId, total: totalPedido } = await createOrder();
+
+      // 2) Cria a preferência no MP e redireciona
+      const pref = await createPreference({
+        pedidoId,
+        total: totalPedido || total,
+      });
+
+      // Observação: caso o pagamento falhe, o carrinho permanecerá vazio
+      // pois o backend limpa na criação do pedido.
+      window.location.href = pref.initPoint;
+    } catch (e) {
+      setErro(e.message || "Não foi possível iniciar o pagamento");
+      setInfo(
+        "Se o erro persistir, tente novamente mais tarde. Obs.: seu carrinho pode ter sido esvaziado ao criar o pedido."
+      );
+      await carregarCarrinho();
+    } finally {
+      setFinalizando(false);
     }
   }
 
@@ -105,11 +138,10 @@ export default function CarrinhoPage() {
 
           {loading && <div className="text-center text-black">Carregando…</div>}
           {erro && !loading && <div className="text-center text-red-700">{erro}</div>}
+          {info && !loading && <div className="text-center text-slate-700">{info}</div>}
 
           {!loading && !erro && itens.length === 0 && (
-            <div className="text-center text-black">
-              Seu carrinho está vazio.
-            </div>
+            <div className="text-center text-black">Seu carrinho está vazio.</div>
           )}
 
           <div className="grid grid-cols-1 gap-3">
@@ -135,10 +167,7 @@ export default function CarrinhoPage() {
               const pid = item?.produtoId || produto?._id;
 
               return (
-                <div
-                  key={pid || idx}
-                  className="border rounded-xl bg-white overflow-hidden"
-                >
+                <div key={pid || idx} className="border rounded-xl bg-white overflow-hidden">
                   <div className="flex gap-3 p-3">
                     <div className="w-24 h-24 bg-slate-100 grid place-items-center flex-shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -157,17 +186,19 @@ export default function CarrinhoPage() {
                       <div className="font-semibold text-black">{nome}</div>
                       <div className="text-sm text-black">
                         {modelo ? <span className="mr-2">{modelo}</span> : null}
-                        {cor ? <>· <span className="ml-2">{cor}</span></> : null}
+                        {cor ? (
+                          <>
+                            · <span className="ml-2">{cor}</span>
+                          </>
+                        ) : null}
                       </div>
 
                       <div className="mt-1 text-sm text-black">
                         Preço: <span className="font-semibold">{precoBRL}</span>
                       </div>
 
-                      {/* Quantidade com botão de diminuir */}
                       <div className="mt-1 text-sm text-black flex items-center gap-2">
-                        Quantidade:{" "}
-                        <span className="font-semibold">{quantidade}</span>
+                        Quantidade: <span className="font-semibold">{quantidade}</span>
                         <button
                           type="button"
                           onClick={() => handleDecrement(item)}
@@ -190,9 +221,8 @@ export default function CarrinhoPage() {
             })}
           </div>
 
-          {/* Total */}
           {!loading && !erro && itens.length > 0 && (
-            <div className="mt-6 text-right">
+            <div className="mt-6 flex items-center justify-between">
               <div className="text-lg font-bold text-black">
                 Total:{" "}
                 {total.toLocaleString("pt-BR", {
@@ -200,6 +230,15 @@ export default function CarrinhoPage() {
                   currency: "BRL",
                 })}
               </div>
+
+              <button
+                type="button"
+                onClick={handleCheckout}
+                disabled={finalizando}
+                className="px-4 py-2 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {finalizando ? "Redirecionando..." : "Finalizar compra"}
+              </button>
             </div>
           )}
         </div>

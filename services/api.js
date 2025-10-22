@@ -2,83 +2,48 @@ import { getToken, setAuth } from "./storage";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-/**
- * POST /api/auth/login
- */
+/* ========== AUTH ========== */
 export async function login(email, senha) {
   const res = await fetch(`${BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, senha }),
   });
-
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.erro || "Falha no login");
-  }
-
-  // data = { msg, token, usuario }
+  if (!res.ok) throw new Error(data?.erro || "Falha no login");
   setAuth({ token: data.token, usuario: data.usuario });
   return data;
 }
 
-/**
- * GET /api/usuario  (requer Bearer token)
- */
 export async function getUsuario() {
   const token = getToken();
   if (!token) throw new Error("Sem token");
-
-  const res = await fetch(`${BASE_URL}/api/usuario`, {
+  const res = await fetch(`${BASE_URL}/api/usuario/usuario`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.erro || "Erro ao obter usuário");
-  }
-
-  return data; // usuário sem senha
+  if (!res.ok) throw new Error(data?.erro || "Erro ao obter usuário");
+  return data;
 }
 
-/**
- * GET /api/products/produtos  (lista todos os produtos)
- */
+/* ========== PRODUTOS ========== */
 export async function getProdutos({ signal } = {}) {
   const res = await fetch(`${BASE_URL}/api/products/produtos`, { signal });
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.erro || "Erro ao obter produtos");
-  }
-  return data; // array de produtos
+  if (!res.ok) throw new Error(data?.erro || "Erro ao obter produtos");
+  return data;
 }
 
-/**
- * POST /api/carrinho/carrinho  (adicionar item)
- * body: { produtoId, quantidade }
- */
-export async function addToCart({ produtoId, quantidade = 1 }) {
-  const token = getToken();
-  if (!token) throw new Error("Sem token");
-
-  const res = await fetch(`${BASE_URL}/api/carrinho/carrinho`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ produtoId, quantidade }),
-  });
-
+export async function searchProdutos(term, { signal } = {}) {
+  const url = new URL(`${BASE_URL}/api/products/busca`);
+  url.searchParams.set("q", term);
+  const res = await fetch(url.toString(), { signal });
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.erro || "Erro ao adicionar ao carrinho");
-  }
-
-  return data; // ex.: { msg, carrinho } (depende do backend)
+  if (!res.ok) throw new Error(data?.erro || "Erro na busca");
+  return data;
 }
 
-/** Util: extrai um ID string de diferentes formatos */
+/* ========== CARRINHO ========== */
 function toId(val) {
   if (!val) return null;
   if (typeof val === "string") return val;
@@ -90,82 +55,49 @@ function toId(val) {
   return String(val);
 }
 
-/**
- * GET /api/carrinho/carrinho  (listar itens do carrinho)
- * Normaliza para: [{ produtoId, quantidade, produto, preco }]
- * e enriquece buscando detalhes na lista global de produtos.
- */
-export async function getCart({ enrich = true } = {}) {
+export async function addToCart({ produtoId, quantidade = 1 }) {
   const token = getToken();
   if (!token) throw new Error("Sem token");
+  const res = await fetch(`${BASE_URL}/api/carrinho/carrinho`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ produtoId, quantidade }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao adicionar ao carrinho");
+  return data;
+}
 
+/** GET carrinho do backend: { produtos: [ ...produto, quantidade ] } */
+export async function getCart() {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
   const res = await fetch(`${BASE_URL}/api/carrinho/carrinho`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-
   const payload = await res.json();
-  if (!res.ok) {
-    throw new Error(payload?.erro || "Erro ao obter carrinho");
-  }
+  if (!res.ok) throw new Error(payload?.erro || "Erro ao obter carrinho");
 
-  let itens = [];
-  if (Array.isArray(payload)) {
-    itens = payload;
-  } else if (payload?.produtos) {
-    itens = payload.produtos.map((p) => {
-      const pid = toId(p.produtoId) || toId(p.produto?._id) || toId(p._id) || null;
-      return {
-        produtoId: pid,
-        quantidade: Number(p.quantidade ?? 1) || 1,
-        produto:
-          typeof p.produto === "object" && p.produto
-            ? { ...p.produto, _id: toId(p.produto?._id) || pid }
-            : undefined,
-        preco: Number(p.preco ?? 0) || undefined,
-      };
-    });
-  } else if (payload?.itens || payload?.items) {
-    const arr = payload.itens || payload.items || [];
-    itens = arr.map((p) => ({
-      produtoId: toId(p.produtoId) || toId(p.produto?._id) || null,
-      quantidade: Number(p.quantidade ?? p.qtd ?? p.qty ?? 1) || 1,
-      produto:
-        typeof p.produto === "object" && p.produto
-          ? { ...p.produto, _id: toId(p.produto?._id) }
-          : undefined,
-      preco: Number(p.preco ?? 0) || undefined,
-    }));
-  }
-
-  if (!enrich) return itens;
-
-  const todosProdutos = await getProdutos();
-  const map = new Map((todosProdutos || []).map((prod) => [toId(prod._id), prod]));
-
-  const enriquecidos = itens.map((it) => {
-    const prodDetalhe =
-      it.produto || (it.produtoId ? map.get(toId(it.produtoId)) : null) || null;
-
-    const precoUnit = Number((prodDetalhe && prodDetalhe.preco) ?? it.preco ?? 0) || 0;
-
+  const arr = Array.isArray(payload?.produtos) ? payload.produtos : [];
+  // Normaliza para: { produtoId, quantidade, produto, preco }
+  return arr.map((p) => {
+    const pid = toId(p?._id) || toId(p?.produtoId);
+    const preco = Number(p?.preco ?? 0) || 0;
     return {
-      ...it,
-      produto: prodDetalhe,
-      preco: precoUnit,
+      produtoId: pid,
+      quantidade: Number(p?.quantidade ?? 1) || 1,
+      produto: p ? { ...p, _id: pid } : undefined,
+      preco,
     };
   });
-
-  return enriquecidos;
 }
 
-/**
- * Contagem total de itens do carrinho (soma das quantidades)
- */
 export async function getCartCount() {
-  const token = getToken();
-  if (!token) return 0;
   try {
-    const itens = await getCart({ enrich: false });
+    const itens = await getCart();
     return (itens || []).reduce(
       (acc, it) => acc + (Number(it?.quantidade ?? 1) || 1),
       0
@@ -175,46 +107,111 @@ export async function getCartCount() {
   }
 }
 
-/**
- * DELETE /api/carrinho/item  (diminui 1 unidade do item no carrinho)
- * Tenta primeiro enviar no body { produtoId, quantidade: 1 }.
- * Se o backend não aceitar body em DELETE, tenta com querystring (?produtoId=...&quantidade=1).
- */
 export async function decrementCartItem(produtoId) {
   if (!produtoId) throw new Error("produtoId obrigatório");
   const token = getToken();
-  const headers = {};
+  const headers = {
+    "Content-Type": "application/json",
+  };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  headers["Content-Type"] = "application/json";
 
-  // Tentativa 1: DELETE com body JSON
-  try {
-    const res = await fetch(`${BASE_URL}/api/carrinho/item`, {
-      method: "DELETE",
-      headers,
-      body: JSON.stringify({ produtoId, quantidade: 1 }),
-    });
-    let data = {};
-    try {
-      data = await res.json();
-    } catch (_) {}
-    if (res.ok) return data;
-  } catch (_) {}
-
-  // Tentativa 2: DELETE com query string
-  const urlQS = `${BASE_URL}/api/carrinho/item?produtoId=${encodeURIComponent(
-    produtoId
-  )}&quantidade=1`;
-  const res2 = await fetch(urlQS, {
+  const res = await fetch(`${BASE_URL}/api/carrinho/item`, {
     method: "DELETE",
     headers,
+    body: JSON.stringify({ produtoId }),
   });
-  let data2 = {};
+  let data = {};
   try {
-    data2 = await res2.json();
+    data = await res.json();
   } catch (_) {}
-  if (!res2.ok) {
-    throw new Error(data2?.erro || "Erro ao diminuir a quantidade");
-  }
-  return data2;
+  if (!res.ok) throw new Error(data?.erro || "Erro ao diminuir a quantidade");
+  return data;
+}
+
+/* ========== PEDIDOS + MERCADO PAGO ========== */
+export async function createOrder() {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  const res = await fetch(`${BASE_URL}/api/pedidos/pedidos`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao criar pedido");
+  // data = { msg, pedidoId, total }
+  return data;
+}
+
+export async function createPreference({ pedidoId, total }) {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  const res = await fetch(`${BASE_URL}/api/mercado_pago/preference`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ pedidoId, total }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao criar preferência");
+  // { initPoint, preferenceId }
+  return data;
+}
+
+export async function getPedidos() {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  const res = await fetch(`${BASE_URL}/api/pedidos/pedidos`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.erro || "Erro ao listar pedidos");
+  return data; // array
+}
+
+/* ========== ADMIN PRODUTOS ========== */
+export async function adminCreateProduto({
+  nome,
+  descricao,
+  preco,
+  estoque,
+  categoria,
+  cor,
+  modelo,
+  file, // File | Blob opcional
+}) {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  const fd = new FormData();
+  fd.set("nome", nome);
+  fd.set("descricao", descricao);
+  fd.set("preco", String(preco));
+  fd.set("estoque", String(estoque));
+  fd.set("categoria", categoria);
+  fd.set("cor", cor);
+  fd.set("modelo", modelo);
+  if (file) fd.set("file", file);
+
+  const res = await fetch(`${BASE_URL}/api/products/produtos`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }, // NÃO definir Content-Type; o browser seta boundary
+    body: fd,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.erro || "Erro ao criar produto");
+  return data;
+}
+
+export async function adminDeleteProduto(id) {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  const url = `${BASE_URL}/api/products/produtos?_id=${encodeURIComponent(id)}`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.erro || "Erro ao excluir produto");
+  return data;
 }

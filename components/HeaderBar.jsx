@@ -1,16 +1,16 @@
 import Link from "next/link";
 
 export default function HeaderBar({
-  user,            // { nome, avatar }
-  onLogout,        // função chamada ao clicar em "Sair"
-  cartCount = 0,   // quantidade de itens no carrinho
+  user,            // { nome, avatar, role }
+  onLogout,
+  cartCount = 0,
   logoSrc = "/imagens/LogoMeMimei.png",
-  userIconSrc = "/imagens/usuarioCinza.png",     // ícone quando NÃO está logado
-  avatarFallback = "/imagens/usuarioLaranja.png" // fallback quando está logado mas sem avatar
+  userIconSrc = "/imagens/usuarioCinza.png",
+  avatarFallback = "/imagens/usuarioLaranja.png",
 }) {
   const isLogged = !!user;
+  const isAdmin = isLogged && String(user?.role || "").toLowerCase() === "admin";
 
-  // Se logado e houver avatar válido, usa-o; senão, usa fallback laranja
   const avatarSrc =
     isLogged && user?.avatar && String(user.avatar).trim()
       ? user.avatar
@@ -30,10 +30,20 @@ export default function HeaderBar({
         </Link>
       </div>
 
-      {/* Direita: (logado) Carrinho + avatar + nome + Sair | (deslogado) Login */}
       <div className="flex items-center gap-2 sm:gap-3 mr-4 sm:mr-[10%]">
         {isLogged ? (
           <>
+            {/* Link Admin (apenas admin) */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
+                aria-label="Painel administrativo"
+              >
+                Admin
+              </Link>
+            )}
+
             {/* Carrinho + badge */}
             <Link
               href="/carrinho"
@@ -64,20 +74,18 @@ export default function HeaderBar({
               )}
             </Link>
 
-            {/* Avatar */}
+            {/* Avatar + Nome */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={avatarSrc}
               alt={user?.nome || "Usuário"}
               className="h-10 w-10 sm:h-14 sm:w-14 rounded-full object-cover"
             />
-
-            {/* Nome (truncado para não esmagar layout) */}
-            <span className="text-sm sm:text-base font-semibold truncate max-w-[34vw] sm:max-w-[20rem]">
+            <span className="text-sm sm:text-base font-semibold truncate max-w-[28vw] sm:max-w-[20rem]">
               {user?.nome || "Usuário"}
             </span>
 
-            {/* Sair (menor no mobile) */}
+            {/* Sair */}
             <button
               type="button"
               onClick={onLogout}
