@@ -60,7 +60,7 @@ export default function AdminPedidosPage() {
     })();
   }, []);
 
-  // Carrega pedidos + produtos + nomes dos clientes
+  // Carrega pedidos + produtos + nomes/contatos dos clientes
   useEffect(() => {
     (async () => {
       try {
@@ -69,7 +69,7 @@ export default function AdminPedidosPage() {
 
         const [pedidos, produtos] = await Promise.all([
           getPedidos(),                   // admin vê todos
-          getProdutos().catch(() => []),  // para mapear nomes/imagens
+          getProdutos().catch(() => []),  // para mapear nomes/imagens dos itens
         ]);
 
         setLista(Array.isArray(pedidos) ? pedidos : []);
@@ -109,6 +109,18 @@ export default function AdminPedidosPage() {
     return map;
   }, [users]);
 
+  // Quantos pedidos têm cliente com dados incompletos (sem telefone ou sem endereço)
+  const incompletosCount = useMemo(() => {
+    let count = 0;
+    for (const p of lista || []) {
+      const u = userById.get(String(p.usuarioId));
+      const telOK = !!(u && u.telefone && String(u.telefone).trim());
+      const endOK = !!(u && u.endereco && String(u.endereco).trim());
+      if (!telOK || !endOK) count++;
+    }
+    return count;
+  }, [lista, userById]);
+
   const handleLogout = () => {
     clearAuth();
     setUser(null);
@@ -123,6 +135,15 @@ export default function AdminPedidosPage() {
         <main className="flex-1">
           <div className="w-full max-w-screen-lg mx-auto px-3 py-6">
             <h1 className="text-2xl font-bold text-black mb-4">Pedidos (Admin)</h1>
+
+            {/* ALERTA: clientes com dados incompletos */}
+            {!loading && !erro && incompletosCount > 0 && (
+              <div className="mb-4 p-3 rounded-lg border border-yellow-300 bg-yellow-50 text-yellow-900">
+                ⚠ Existem <strong>{incompletosCount}</strong> pedido(s) com
+                dados de contato incompletos (WhatsApp e/ou endereço). Considere
+                solicitar atualização ao cliente.
+              </div>
+            )}
 
             {loading && <div className="text-black">Carregando…</div>}
             {erro && <div className="text-red-700">{erro}</div>}
@@ -154,30 +175,46 @@ export default function AdminPedidosPage() {
                       const u = userById.get(String(p.usuarioId));
                       const nomeCliente = u?.nome || "—";
                       const emailCliente = u?.email || "—";
-                      const telefoneCliente = u?.telefone || "—";
+                      const telefoneCliente = u?.telefone || "";
                       const enderecoCliente = u?.endereco || "";
+
+                      const telOK = !!(telefoneCliente && String(telefoneCliente).trim());
+                      const endOK = !!(enderecoCliente && String(enderecoCliente).trim());
+                      const dadosIncompletos = !telOK || !endOK;
 
                       return (
                         <tr key={p._id} className="border-t align-top">
                           <td className="p-3 text-black">
-                            <div className="font-semibold">{nomeCliente}</div>
+                            <div className="font-semibold flex items-center gap-2">
+                              <span>{nomeCliente}</span>
+                              {dadosIncompletos && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 text-[11px]">
+                                  ⚠ Dados incompletos
+                                </span>
+                              )}
+                            </div>
                             <div className="text-sm text-slate-700">{emailCliente}</div>
                           </td>
+
                           <td className="p-3 text-black">
                             <div className="text-sm">
-                              <div><span className="font-semibold">WhatsApp:</span> {telefoneCliente}</div>
-                              {enderecoCliente ? (
-                                <div className="mt-1">
-                                  <span className="font-semibold">Endereço:</span> {enderecoCliente}
-                                </div>
-                              ) : null}
+                              <div>
+                                <span className="font-semibold">WhatsApp:</span>{" "}
+                                {telOK ? telefoneCliente : <span className="text-red-700">— informar</span>}
+                              </div>
+                              <div className="mt-1">
+                                <span className="font-semibold">Endereço:</span>{" "}
+                                {endOK ? enderecoCliente : <span className="text-red-700">— informar</span>}
+                              </div>
                             </div>
                           </td>
+
                           <td className="p-3 text-black">{total}</td>
                           <td className="p-3 text-black">
                             <StatusBadge status={p.status} />
                           </td>
                           <td className="p-3 text-black">{criado}</td>
+
                           <td className="p-3 text-black">
                             {(p.produtos || []).map((it, idx) => {
                               const prod = prodMap.get(String(it.produtoId));

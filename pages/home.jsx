@@ -3,6 +3,7 @@ import HeaderBar from "../components/HeaderBar";
 import PromoBanner from "../components/PromoBanner";
 import BrandButton from "../components/BrandButton";
 import FooterLinks from "../components/FooterLinks";
+import CompleteProfileBanner from "../components/CompleteProfileBanner";
 import brands from "../lib/brands";
 import { getUsuario, getCartCount } from "../services/api";
 import { getStoredUser, getToken, clearAuth } from "../services/storage";
@@ -58,6 +59,10 @@ export default function HomePage() {
       </main>
 
       <FooterLinks />
+
+      {/* Banner flutuante para completar perfil:
+          aparece apenas se faltar telefone/endereco e o usuário não tiver dispensado */}
+      <CompleteProfileBanner user={user} />
     </div>
   );
 }
