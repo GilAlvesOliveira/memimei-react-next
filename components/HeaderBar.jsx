@@ -74,6 +74,15 @@ export default function HeaderBar({
               )}
             </Link>
 
+            {/* Meus Pedidos */}
+            <Link
+              href="/pedidos"
+              className="px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
+              aria-label="Meus pedidos"
+            >
+              Pedidos
+            </Link>
+
             {/* Avatar + Nome */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
