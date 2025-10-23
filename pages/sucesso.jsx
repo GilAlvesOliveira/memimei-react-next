@@ -15,7 +15,7 @@ function Confetti({ show = true, pieces = 120, duration = 5000 }) {
       time: 2.6 + Math.random() * 2.2,   // s
       size: 6 + Math.round(Math.random() * 8), // px
       rot: Math.round(Math.random() * 360),
-      color: ["#58e08aff", "#FFFFFF", "#16A34A", "#FB923C"][
+      color: ["#5cec5cff", "#FFFFFF", "#16A34A", "#FB923C"][
         Math.floor(Math.random() * 4)
       ],
     }));
