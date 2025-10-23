@@ -1,9 +1,9 @@
-// components/HeaderBar.jsx
 import Link from "next/link";
+import { logoutToHome } from "../services/storage";
 
 export default function HeaderBar({
   user,            // { nome, avatar, role }
-  onLogout,
+  onLogout,        // opcional — chamamos e ainda assim garantimos /home
   cartCount = 0,
   logoSrc = "/imagens/LogoMeMimei.png",
   userIconSrc = "/imagens/usuarioCinza.png",
@@ -16,6 +16,17 @@ export default function HeaderBar({
     isLogged && user?.avatar && String(user.avatar).trim()
       ? user.avatar
       : avatarFallback;
+
+  // handler único: chama qualquer onLogout custom e SEMPRE finaliza em /home
+  const handleLogoutClick = () => {
+    try {
+      onLogout?.();
+    } catch (_) {
+      // ignore erros do handler externo
+    } finally {
+      logoutToHome();
+    }
+  };
 
   return (
     <header className="h-[20vh] min-h-[72px] flex items-center justify-between bg-black text-white">
@@ -107,7 +118,7 @@ export default function HeaderBar({
             {/* Sair */}
             <button
               type="button"
-              onClick={onLogout}
+              onClick={handleLogoutClick}
               className="ml-1 px-2 py-1 sm:px-3 sm:py-2 rounded-lg border border-white text-white hover:bg-white hover:text-black transition text-xs sm:text-sm"
               aria-label="Sair da conta"
             >

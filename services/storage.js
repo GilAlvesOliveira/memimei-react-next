@@ -51,3 +51,13 @@ export function clearPostLoginAction() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(POST_LOGIN_ACTION_KEY);
 }
+
+/**
+ * Logout global → sempre vai para /home (independente de onde estiver).
+ * Usa replace para não deixar a página anterior no histórico.
+ */
+export function logoutToHome() {
+  if (typeof window === "undefined") return;
+  clearAuth();
+  window.location.replace("/login");
+}
