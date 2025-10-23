@@ -29,6 +29,7 @@ export async function getUsuario() {
 
 /* ========== PRODUTOS ========== */
 export async function getProdutos({ signal } = {}) {
+  // Mantido como no seu front original
   const res = await fetch(`${BASE_URL}/api/products/produtos`, { signal });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.erro || "Erro ao obter produtos");

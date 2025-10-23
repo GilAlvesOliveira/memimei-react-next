@@ -7,15 +7,32 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
   const estoque = Number(produto?.estoque ?? 0) || 0;
   const esgotado = estoque <= 0;
 
+  function handleAdd() {
+    if (esgotado) return;
+    onAdd?.(produto);
+  }
+  function handleBuy() {
+    if (esgotado) return;
+    onBuy?.(produto);
+  }
+
   return (
     <div className="border rounded-xl overflow-hidden bg-white">
-      <div className="w-full aspect-[4/3] bg-slate-100 grid place-items-center">
+      <div className="w-full aspect-[4/3] bg-slate-100 relative grid place-items-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={produto.imagem}
           alt={produto.nome}
           className="max-h-full max-w-full object-contain"
         />
+
+        {esgotado && (
+          <div className="absolute inset-0 bg-white/70 grid place-items-center">
+            <span className="px-3 py-1.5 rounded bg-red-600 text-white font-bold">
+              ESGOTADO
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="p-3">
@@ -43,12 +60,10 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
 
         <div className="mt-2 font-bold text-black">{precoBRL}</div>
 
-        {/* Ações */}
         <div className="mt-3 flex flex-col gap-2">
-          {/* Adicionar ao carrinho */}
           <button
             type="button"
-            onClick={() => onAdd?.(produto)}
+            onClick={handleAdd}
             disabled={esgotado}
             className="w-full py-2.5 rounded-lg border border-orange-500 text-orange-600 font-semibold hover:bg-orange-50 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Adicionar ao carrinho"
@@ -63,10 +78,9 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
             Adicionar ao carrinho
           </button>
 
-          {/* Comprar (add + ir para o carrinho) */}
           <button
             type="button"
-            onClick={() => onBuy?.(produto)}
+            onClick={handleBuy}
             disabled={esgotado}
             className="w-full py-2.5 rounded-lg bg-black text-white font-semibold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Comprar agora"
