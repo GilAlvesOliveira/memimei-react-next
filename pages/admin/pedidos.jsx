@@ -105,7 +105,11 @@ export default function AdminPedidosPage() {
       await adminSetPedidoEnviado(pedido._id, novoValor);
       // atualiza localmente
       setLista((old) =>
-        old.map((x) => (x._id === pedido._id ? { ...x, enviado: !!novoValor, enviadoEm: novoValor ? new Date().toISOString() : null } : x))
+        old.map((x) =>
+          x._id === pedido._id
+            ? { ...x, enviado: !!novoValor, enviadoEm: novoValor ? new Date().toISOString() : null }
+            : x
+        )
       );
     } catch (e) {
       alert(e.message || "Erro ao atualizar envio");
@@ -157,8 +161,11 @@ export default function AdminPedidosPage() {
                       const telefone = u.telefone || "-";
                       const endereco = u.endereco || "-";
 
+                      // cor de fundo para pedido "enviado"
+                      const rowHighlight = p.enviado ? "bg-emerald-50" : "";
+
                       return (
-                        <tr key={p._id} className="border-t align-top">
+                        <tr key={p._id} className={`border-t align-top transition-colors ${rowHighlight}`}>
                           <td className="p-3 text-black">
                             <div className="font-semibold">{nome}</div>
                             {email && <div className="text-sm text-slate-700">{email}</div>}
