@@ -1,3 +1,4 @@
+// pages/carrinho.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import HeaderBar from "../components/HeaderBar";
@@ -8,7 +9,7 @@ import {
   decrementCartItem,
   createOrder,
   createPreference,
-  getPedidos, // <-- vamos usar para fazer o polling do status
+  getPedidos,
 } from "../services/api";
 import {
   getStoredUser,
@@ -16,6 +17,48 @@ import {
   clearAuth,
   setPostLoginAction,
 } from "../services/storage";
+
+/** Helpers para lembrar pedido pendente */
+const PENDING_KEY = "lastPendingOrder";
+function savePendingOrder({ id, total }) {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ id, total }));
+  } catch {}
+}
+function readPendingOrder() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function clearPendingOrder() {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {}
+}
+
+/** Abre link em nova aba de forma “à prova” de bloqueador (pré-abre a janela) */
+function openInNewTabSafe(url) {
+  const win = window.open("", "_blank");
+  if (win) {
+    try {
+      win.opener = null;
+      win.location.href = url;
+      return true;
+    } catch {
+      // fallback
+      win.close();
+      window.location.href = url;
+      return false;
+    }
+  } else {
+    // se o navegador bloqueou, como último recurso vai na mesma aba
+    window.location.href = url;
+    return false;
+  }
+}
 
 export default function CarrinhoPage() {
   const router = useRouter();
@@ -27,13 +70,15 @@ export default function CarrinhoPage() {
 
   const [finalizando, setFinalizando] = useState(false);
 
-  // Estados da “espera de pagamento” (polling)
+  // Espera/polling
   const [waitingPay, setWaitingPay] = useState(false);
   const [pedidoId, setPedidoId] = useState(null);
   const [pollMsg, setPollMsg] = useState("");
   const [pollErr, setPollErr] = useState("");
-  const [pollCount, setPollCount] = useState(0);
   const pollTimer = useRef(null);
+
+  // “Retomar pagamento” (quando existe pedido pendente salvo)
+  const [resumePending, setResumePending] = useState(null); // { id, total }
 
   useEffect(() => {
     const token = getToken();
@@ -49,10 +94,36 @@ export default function CarrinhoPage() {
           const freshUser = await getUsuario();
           setUser(freshUser);
         } catch {
-          const local = getStoredUser();
-          setUser(local || null);
+          setUser(getStoredUser() || null);
         }
         await carregarCarrinho();
+
+        // Verifica se havia um pedido pendente salvo e se ainda está pendente no backend
+        const saved = readPendingOrder();
+        if (saved?.id) {
+          const pedidos = await getPedidos().catch(() => []);
+          const achado = (pedidos || []).find((p) => {
+            const idStr = (p?._id && (p._id.$oid || p._id)) || p?._id || "";
+            return String(idStr) === String(saved.id);
+          });
+          if (achado) {
+            const status = String(achado.status || "").toLowerCase();
+            if (status === "aprovado") {
+              // aprovado enquanto estávamos fora
+              clearPendingOrder();
+              router.push(`/sucesso?pedido=${encodeURIComponent(saved.id)}`);
+            } else if (status === "pendente") {
+              // continua pendente -> oferece “Gerar QR Code novamente”
+              setResumePending({ id: saved.id, total: achado.total || saved.total || 0 });
+            } else {
+              // outro status -> limpa pendente
+              clearPendingOrder();
+            }
+          } else {
+            // pedido não encontrado -> limpa pendente
+            clearPendingOrder();
+          }
+        }
       } catch (e) {
         setErro(e.message || "Erro ao carregar carrinho");
       }
@@ -98,7 +169,6 @@ export default function CarrinhoPage() {
   const handleLogout = () => {
     clearAuth();
     setUser(null);
-    // após sair, manda pra tela de login (pedido do cliente)
     router.push("/login");
   };
 
@@ -117,54 +187,51 @@ export default function CarrinhoPage() {
     }
   }
 
-  // ==== POLLING DO STATUS DO PEDIDO ====
+  // ==== POLLING ====
   function startPollingStatus(pedidoIdCriado) {
     if (pollTimer.current) {
       clearInterval(pollTimer.current);
       pollTimer.current = null;
     }
     setPollErr("");
-    setPollMsg("Abrimos o Mercado Pago em uma nova aba. Conclua o pagamento e volte aqui — estamos monitorando automaticamente.");
-    setPollCount(0);
+    setPollMsg(
+      "Abrimos o Mercado Pago em uma nova aba. Conclua o pagamento e volte aqui — estamos monitorando automaticamente."
+    );
     setWaitingPay(true);
 
     const MAX_ATTEMPTS = 36; // ~3 minutos (36 × 5s)
+    let attempts = 0;
+
     pollTimer.current = setInterval(async () => {
       try {
-        setPollCount((x) => x + 1);
+        attempts += 1;
         const pedidos = await getPedidos();
         const achado = (pedidos || []).find((p) => {
-          const idStr =
-            (p?._id && (p._id.$oid || p._id)) || p?._id || "";
+          const idStr = (p?._id && (p._id.$oid || p._id)) || p?._id || "";
           return String(idStr) === String(pedidoIdCriado);
         });
 
         if (achado && String(achado.status).toLowerCase() === "aprovado") {
           clearInterval(pollTimer.current);
           pollTimer.current = null;
-          setPollMsg("Pagamento aprovado! Redirecionando…");
           setWaitingPay(false);
+          setPollMsg("Pagamento aprovado! Redirecionando…");
+          clearPendingOrder(); // limpamos o pendente salvo
           router.push(`/sucesso?pedido=${encodeURIComponent(pedidoIdCriado)}`);
           return;
         }
-      } catch (e) {
-        // ignora erros intermitentes de rede
+      } catch {
+        // ignora erros intermitentes
       }
 
-      // timeout do polling
-      setPollCount((prev) => {
-        if (prev + 1 >= MAX_ATTEMPTS) {
-          if (pollTimer.current) {
-            clearInterval(pollTimer.current);
-            pollTimer.current = null;
-          }
-          setWaitingPay(false);
-          setPollErr(
-            "Ainda não confirmamos seu pagamento. Se você já pagou, aguarde alguns instantes ou verifique em 'Meus pedidos'."
-          );
-        }
-        return prev + 1;
-      });
+      if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(pollTimer.current);
+        pollTimer.current = null;
+        setWaitingPay(false);
+        setPollErr(
+          "Ainda não confirmamos seu pagamento. Se você já pagou, aguarde alguns instantes ou verifique em 'Meus pedidos'."
+        );
+      }
     }, 5000);
   }
 
@@ -175,27 +242,92 @@ export default function CarrinhoPage() {
       setPollMsg("");
       setFinalizando(true);
 
-      // 1) Cria o pedido (o backend JÁ LIMPA o carrinho)
+      // 1) Cria o pedido (backend limpa carrinho)
       const { pedidoId: idGerado, total: totalPedido } = await createOrder();
       setPedidoId(idGerado);
-      setItens([]); // reflete o esvaziamento do carrinho imediatamente
+      savePendingOrder({ id: idGerado, total: totalPedido || total });
+      setItens([]); // reflete esvaziamento
 
-      // 2) Cria a preferência no MP
+      // 2) Gera preferência
       const pref = await createPreference({
         pedidoId: idGerado,
         total: totalPedido || total,
       });
 
-      // 3) Abre o Mercado Pago em NOVA ABA
-      window.open(pref.initPoint, "_blank", "noopener");
+      // 3) Abre em NOVA ABA (pré-abre para evitar bloqueio)
+      openInNewTabSafe(pref.initPoint);
 
-      // 4) Começa a monitorar o status do pedido na aba atual
+      // 4) Começa polling
       startPollingStatus(idGerado);
     } catch (e) {
       setErro(e.message || "Não foi possível iniciar o pagamento");
     } finally {
       setFinalizando(false);
     }
+  }
+
+  async function handleRegenerate() {
+    try {
+      setErro("");
+      setPollErr("");
+      // tenta pegar o pendente mais confiável
+      let pend = resumePending || readPendingOrder() || null;
+
+      // se não temos cache, tenta achar o último pendente do usuário
+      if (!pend?.id) {
+        const pedidos = await getPedidos().catch(() => []);
+        const onlyPendentes = (pedidos || []).filter(
+          (p) => String(p.status || "").toLowerCase() === "pendente"
+        );
+        // pega o mais recente
+        const last = onlyPendentes.sort(
+          (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
+        )[0];
+        if (last) {
+          const idStr = (last?._id && (last._id.$oid || last._id)) || last?._id || "";
+          pend = { id: String(idStr), total: Number(last.total || 0) || 0 };
+        }
+      }
+
+      if (!pend?.id) {
+        setErro("Nenhum pedido pendente para gerar.");
+        return;
+      }
+
+      // garante que o total está correto via backend (se possível)
+      const pedidosNow = await getPedidos().catch(() => []);
+      const found = (pedidosNow || []).find((p) => {
+        const idStr = (p?._id && (p._id.$oid || p._id)) || p?._id || "";
+        return String(idStr) === String(pend.id);
+      });
+      const totalToUse = found?.total ?? pend.total ?? total;
+
+      // cria nova preferência para o MESMO pedido
+      const pref = await createPreference({
+        pedidoId: pend.id,
+        total: Number(totalToUse || 0),
+      });
+
+      // abre em nova aba
+      openInNewTabSafe(pref.initPoint);
+
+      // salva e inicia polling
+      savePendingOrder({ id: pend.id, total: Number(totalToUse || 0) });
+      setPedidoId(pend.id);
+      startPollingStatus(pend.id);
+      setResumePending({ id: pend.id, total: Number(totalToUse || 0) });
+    } catch (e) {
+      setErro(e.message || "Não foi possível gerar o QR Code novamente");
+    }
+  }
+
+  function handleDiscardPending() {
+    clearPendingOrder();
+    setResumePending(null);
+    setPedidoId(null);
+    setPollErr("");
+    setPollMsg("");
+    setWaitingPay(false);
   }
 
   return (
@@ -209,6 +341,31 @@ export default function CarrinhoPage() {
           {loading && <div className="text-center text-black">Carregando…</div>}
           {erro && !loading && <div className="text-center text-red-700">{erro}</div>}
 
+          {/* Banner para retomar pagamento pendente */}
+          {!loading && !waitingPay && resumePending?.id && (
+            <div className="mb-4 p-3 rounded-lg border bg-yellow-50 border-yellow-400 text-black">
+              Você tem um pedido pendente{" "}
+              <span className="font-semibold">#{resumePending.id}</span>. Deseja gerar o
+              QR Code novamente?
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleRegenerate}
+                  className="px-3 py-1 rounded-lg bg-black text-white hover:opacity-90 transition"
+                >
+                  Gerar QR Code novamente
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardPending}
+                  className="px-3 py-1 rounded-lg border border-black text-black hover:bg-black hover:text-white transition"
+                >
+                  Dispensar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Avisos do fluxo de pagamento */}
           {pollMsg && (
             <div className="mb-4 p-3 rounded-lg bg-orange-50 border border-orange-400 text-black">
@@ -221,7 +378,7 @@ export default function CarrinhoPage() {
             </div>
           )}
 
-          {!loading && !erro && itens.length === 0 && !waitingPay && (
+          {!loading && !erro && itens.length === 0 && !waitingPay && !resumePending?.id && (
             <div className="text-center text-black">Seu carrinho está vazio.</div>
           )}
 
@@ -303,8 +460,8 @@ export default function CarrinhoPage() {
             })}
           </div>
 
-          {/* Total + CTA */}
-          {!loading && !erro && (itens.length > 0 || waitingPay) && (
+          {/* Total + CTAs */}
+          {!loading && !erro && (itens.length > 0 || waitingPay || resumePending?.id) && (
             <div className="mt-6 flex items-center justify-between">
               <div className="text-lg font-bold text-black">
                 Total:{" "}
@@ -314,18 +471,31 @@ export default function CarrinhoPage() {
                 })}
               </div>
 
-              <button
-                type="button"
-                onClick={handleCheckout}
-                disabled={finalizando || waitingPay}
-                className="px-4 py-2 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {finalizando
-                  ? "Gerando pagamento…"
-                  : waitingPay
-                  ? "Aguardando confirmação…"
-                  : "Finalizar compra"}
-              </button>
+              <div className="flex gap-2">
+                {/* Regenerar se há pendente e não estamos esperando agora */}
+                {resumePending?.id && !waitingPay && (
+                  <button
+                    type="button"
+                    onClick={handleRegenerate}
+                    className="px-4 py-2 rounded-lg border border-black text-black hover:bg-black hover:text-white transition"
+                  >
+                    Gerar QR Code novamente
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  disabled={finalizando || waitingPay || itens.length === 0}
+                  className="px-4 py-2 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {finalizando
+                    ? "Gerando pagamento…"
+                    : waitingPay
+                    ? "Aguardando confirmação…"
+                    : "Finalizar compra"}
+                </button>
+              </div>
             </div>
           )}
         </div>
