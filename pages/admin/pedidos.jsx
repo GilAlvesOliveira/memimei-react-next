@@ -1,16 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import HeaderBar from "../../components/HeaderBar";
 import FooterLinks from "../../components/FooterLinks";
 import AdminGuard from "../../components/AdminGuard";
-import { getUsuario, getCartCount, getPedidos } from "../../services/api";
+import { getUsuario, getCartCount, getPedidos, getProdutos } from "../../services/api";
 import { getStoredUser, clearAuth, getToken } from "../../services/storage";
+
+// util p/ normalizar possíveis formatos de _id
+function toId(val) {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "object") {
+    if (val._id) return toId(val._id);
+    if (val.$oid) return String(val.$oid);
+  }
+  try {
+    return String(val);
+  } catch {
+    return "";
+  }
+}
 
 export default function AdminPedidosPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [cartCount, setCartCount] = useState(0);
   const [lista, setLista] = useState([]);
+  const [produtos, setProdutos] = useState([]); // novo: catálogo para buscar imagens
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
 
@@ -37,24 +54,39 @@ export default function AdminPedidosPage() {
   }, []);
 
   useEffect(() => {
+    const abort = new AbortController();
     (async () => {
       try {
         setLoading(true);
         setErro("");
-        const data = await getPedidos(); // backend agora pode devolver usuarioInfo e nomes dos produtos
-        setLista(Array.isArray(data) ? data : []);
-        if (Array.isArray(data) && data.length > 0) {
-          // ajuda a diagnosticar rapidamente a forma dos dados
+        // carrega pedidos e catálogo de produtos (para mapear imagens)
+        const [pedidos, prods] = await Promise.all([
+          getPedidos(),
+          getProdutos({ signal: abort.signal }),
+        ]);
+        setLista(Array.isArray(pedidos) ? pedidos : []);
+        setProdutos(Array.isArray(prods) ? prods : []);
+        if (Array.isArray(pedidos) && pedidos.length > 0) {
           // eslint-disable-next-line no-console
-          console.log("Pedidos(admin) exemplo:", data[0]);
+          console.log("Pedidos(admin) exemplo:", pedidos[0]);
         }
       } catch (e) {
-        setErro(e.message || "Erro ao carregar pedidos");
+        if (e.name !== "AbortError") {
+          setErro(e.message || "Erro ao carregar pedidos");
+        }
       } finally {
         setLoading(false);
       }
     })();
+    return () => abort.abort();
   }, []);
+
+  // map id -> produto
+  const produtoMap = useMemo(() => {
+    const map = new Map();
+    (produtos || []).forEach((p) => map.set(toId(p._id), p));
+    return map;
+  }, [produtos]);
 
   const handleLogout = () => {
     clearAuth();
@@ -129,16 +161,36 @@ export default function AdminPedidosPage() {
                           <td className="p-3 text-black">{criado}</td>
                           <td className="p-3 text-black">
                             {(p.produtos || []).map((it, idx) => {
-                              // backend admin agora pode anexar nome/modelo/cor/preco na linha do item
-                              const nomeProd = it.nome || `Produto ${it.produtoId}`;
+                              const pid = toId(it.produtoId);
+                              const prod = produtoMap.get(pid) || {};
+                              const img = prod.imagem || null;
+
+                              const nomeProd = it.nome || prod.nome || `Produto ${pid}`;
                               const qtd = it.quantidade || 1;
-                              const unit = Number(it.precoUnitario ?? it.preco ?? 0).toLocaleString("pt-BR", {
-                                style: "currency",
-                                currency: "BRL",
-                              });
+                              const unit = Number(it.precoUnitario ?? it.preco ?? 0).toLocaleString(
+                                "pt-BR",
+                                { style: "currency", currency: "BRL" }
+                              );
+
                               return (
-                                <div key={idx} className="text-sm mb-1">
-                                  {nomeProd} — {qtd} × {unit}
+                                <div key={idx} className="text-sm mb-1 flex items-center gap-2">
+                                  {/* thumb pequena */}
+                                  <div className="w-7 h-7 bg-slate-100 rounded overflow-hidden flex-shrink-0 grid place-items-center">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    {img ? (
+                                      <img
+                                        src={img}
+                                        alt={nomeProd}
+                                        className="max-w-full max-h-full object-contain"
+                                      />
+                                    ) : (
+                                      <span className="text-[8px] text-slate-600 px-1">—</span>
+                                    )}
+                                  </div>
+                                  <div className="truncate">
+                                    <span className="font-semibold">{nomeProd}</span>{" "}
+                                    — {qtd} × {unit}
+                                  </div>
                                 </div>
                               );
                             })}
