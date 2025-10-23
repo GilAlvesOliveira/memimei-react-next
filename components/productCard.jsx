@@ -4,6 +4,9 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
     currency: "BRL",
   });
 
+  const estoque = Number(produto?.estoque ?? 0) || 0;
+  const esgotado = estoque <= 0;
+
   return (
     <div className="border rounded-xl overflow-hidden bg-white">
       <div className="w-full aspect-[4/3] bg-slate-100 grid place-items-center">
@@ -26,6 +29,18 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
           ) : null}
         </div>
 
+        <div className="mt-1 text-xs">
+          {esgotado ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded bg-red-100 text-red-700 font-semibold">
+              Esgotado
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800">
+              Estoque: {estoque}
+            </span>
+          )}
+        </div>
+
         <div className="mt-2 font-bold text-black">{precoBRL}</div>
 
         {/* Ações */}
@@ -34,9 +49,10 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
           <button
             type="button"
             onClick={() => onAdd?.(produto)}
-            className="w-full py-2.5 rounded-lg border border-orange-500 text-orange-600 font-semibold hover:bg-orange-50 transition flex items-center justify-center gap-2"
+            disabled={esgotado}
+            className="w-full py-2.5 rounded-lg border border-orange-500 text-orange-600 font-semibold hover:bg-orange-50 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Adicionar ao carrinho"
-            title="Adicionar ao carrinho"
+            title={esgotado ? "Produto esgotado" : "Adicionar ao carrinho"}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -51,9 +67,10 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
           <button
             type="button"
             onClick={() => onBuy?.(produto)}
-            className="w-full py-2.5 rounded-lg bg-black text-white font-semibold hover:opacity-90 transition"
+            disabled={esgotado}
+            className="w-full py-2.5 rounded-lg bg-black text-white font-semibold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Comprar agora"
-            title="Comprar agora"
+            title={esgotado ? "Produto esgotado" : "Comprar agora"}
           >
             Comprar
           </button>

@@ -3,13 +3,28 @@ import HeaderBar from "../components/HeaderBar";
 import FooterLinks from "../components/FooterLinks";
 import ProductCard from "../components/ProductCard";
 import brands from "../lib/brands";
-import { getUsuario, getProdutos, addToCart } from "../services/api";
+import { getUsuario, getProdutos, addToCart, getCart } from "../services/api";
 import {
   getStoredUser,
   getToken,
   clearAuth,
   setPostLoginAction,
 } from "../services/storage";
+
+function toId(val) {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "object") {
+    if (val.$oid) return String(val.$oid);
+    if (val._id) return toId(val._id);
+    if (val.produtoId) return toId(val.produtoId);
+  }
+  return String(val);
+}
+function sameId(a, b) {
+  return toId(a) === toId(b);
+}
 
 export default function ProdutosPage() {
   const [user, setUser] = useState(null);
@@ -58,7 +73,33 @@ export default function ProdutosPage() {
   const handleLogout = () => {
     clearAuth();
     setUser(null);
+    window.location.href = "/home";
   };
+
+  // filtra produtos com estoque > 0
+  const exibidos = useMemo(() => {
+    return (lista || []).filter((p) => Number(p?.estoque ?? 0) > 0);
+  }, [lista]);
+
+  async function jaAtingiuLimite(produto) {
+    const estoque = Number(produto?.estoque ?? 0) || 0;
+    if (estoque <= 0) return true;
+
+    // confere o carrinho atual no backend
+    try {
+      const cart = await getCart();
+      const totalDesteProduto = (cart || []).reduce((acc, it) => {
+        const pid = it?.produtoId || it?.produto?._id || it?._id || it?.produtoId;
+        return sameId(pid, produto._id)
+          ? acc + (Number(it?.quantidade ?? 0) || 0)
+          : acc;
+      }, 0);
+      return totalDesteProduto >= estoque;
+    } catch {
+      // se não deu pra ler o carrinho, deixamos o backend ser a trava final
+      return false;
+    }
+  }
 
   const handleAdd = async (produto) => {
     const token = getToken();
@@ -71,11 +112,24 @@ export default function ProdutosPage() {
       window.location.href = "/login";
       return;
     }
+
     try {
       setErro("");
       setOkMsg("");
+
+      if (await jaAtingiuLimite(produto)) {
+        setErro("Você já atingiu o limite do estoque disponível para este produto.");
+        return;
+      }
+
       await addToCart({ produtoId: produto._id, quantidade: 1 });
-      setOkMsg("Produto adicionado ao carrinho!");
+
+      // revalida depois de adicionar
+      if (await jaAtingiuLimite(produto)) {
+        setOkMsg("Produto adicionado. Você atingiu o limite disponível deste item.");
+      } else {
+        setOkMsg("Produto adicionado ao carrinho!");
+      }
     } catch (e) {
       setErro(e.message || "Falha ao adicionar ao carrinho");
     }
@@ -94,6 +148,12 @@ export default function ProdutosPage() {
     }
     try {
       setErro("");
+
+      if (await jaAtingiuLimite(produto)) {
+        setErro("Você já atingiu o limite do estoque disponível para este produto.");
+        return;
+      }
+
       await addToCart({ produtoId: produto._id, quantidade: 1 });
       window.location.href = "/carrinho";
     } catch (e) {
@@ -114,13 +174,8 @@ export default function ProdutosPage() {
           {okMsg && !loading && <div className="text-center text-green-700">{okMsg}</div>}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {lista.map((p) => (
-              <ProductCard
-                key={p._id}
-                produto={p}
-                onAdd={handleAdd}
-                onBuy={handleBuy}
-              />
+            {exibidos.map((p) => (
+              <ProductCard key={p._id} produto={p} onAdd={handleAdd} onBuy={handleBuy} />
             ))}
           </div>
         </div>

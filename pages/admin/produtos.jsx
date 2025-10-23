@@ -186,6 +186,16 @@ export default function AdminProdutosPage() {
     }
   }
 
+  // === cores por estoque ===
+  function rowBgByStock(qtd) {
+    const n = Number(qtd || 0);
+    // 10..6 = laranja leve, 5..1 = vermelho claro, 0 = vermelho mais escuro
+    if (n === 0) return "bg-red-200";
+    if (n >= 1 && n <= 5) return "bg-red-50";
+    if (n >= 6 && n <= 10) return "bg-orange-50";
+    return ""; // acima de 10 sem destaque
+  }
+
   // classes dos inputs laranja
   const orangeInput =
     "border border-orange-500 rounded px-3 py-2 text-orange-600 placeholder-orange-400 " +
@@ -454,7 +464,7 @@ export default function AdminProdutosPage() {
                         currency: "BRL",
                       });
                       return (
-                        <tr key={p._id} className="border-t">
+                        <tr key={p._id} className={`border-t ${rowBgByStock(p.estoque)}`}>
                           <td className="p-3">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
