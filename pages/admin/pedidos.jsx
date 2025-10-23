@@ -3,7 +3,7 @@ import { useRouter } from "next/router";
 import HeaderBar from "../../components/HeaderBar";
 import FooterLinks from "../../components/FooterLinks";
 import AdminGuard from "../../components/AdminGuard";
-import { getUsuario, getCartCount, getPedidos, getProdutos } from "../../services/api";
+import { getUsuario, getCartCount, getPedidos, getProdutos, adminSetPedidoEnviado } from "../../services/api";
 import { getStoredUser, clearAuth, getToken } from "../../services/storage";
 
 // util p/ normalizar possíveis formatos de _id
@@ -15,11 +15,7 @@ function toId(val) {
     if (val._id) return toId(val._id);
     if (val.$oid) return String(val.$oid);
   }
-  try {
-    return String(val);
-  } catch {
-    return "";
-  }
+  try { return String(val); } catch { return ""; }
 }
 
 export default function AdminPedidosPage() {
@@ -27,9 +23,10 @@ export default function AdminPedidosPage() {
   const [user, setUser] = useState(null);
   const [cartCount, setCartCount] = useState(0);
   const [lista, setLista] = useState([]);
-  const [produtos, setProdutos] = useState([]); // novo: catálogo para buscar imagens
+  const [produtos, setProdutos] = useState([]); // catálogo para buscar imagens
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
+  const [saving, setSaving] = useState(null);   // id do pedido que está salvando envio
 
   useEffect(() => {
     const token = getToken();
@@ -59,21 +56,14 @@ export default function AdminPedidosPage() {
       try {
         setLoading(true);
         setErro("");
-        // carrega pedidos e catálogo de produtos (para mapear imagens)
         const [pedidos, prods] = await Promise.all([
           getPedidos(),
           getProdutos({ signal: abort.signal }),
         ]);
         setLista(Array.isArray(pedidos) ? pedidos : []);
         setProdutos(Array.isArray(prods) ? prods : []);
-        if (Array.isArray(pedidos) && pedidos.length > 0) {
-          // eslint-disable-next-line no-console
-          console.log("Pedidos(admin) exemplo:", pedidos[0]);
-        }
       } catch (e) {
-        if (e.name !== "AbortError") {
-          setErro(e.message || "Erro ao carregar pedidos");
-        }
+        if (e.name !== "AbortError") setErro(e.message || "Erro ao carregar pedidos");
       } finally {
         setLoading(false);
       }
@@ -81,7 +71,6 @@ export default function AdminPedidosPage() {
     return () => abort.abort();
   }, []);
 
-  // map id -> produto
   const produtoMap = useMemo(() => {
     const map = new Map();
     (produtos || []).forEach((p) => map.set(toId(p._id), p));
@@ -95,13 +84,35 @@ export default function AdminPedidosPage() {
     router.push("/login"); // sair sempre leva ao login
   };
 
-  const badge = (status) => {
+  const badgePagamento = (status) => {
     const s = String(status || "").toLowerCase();
     const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold";
     if (s === "aprovado") return <span className={`${base} bg-green-100 text-green-700`}>Aprovado</span>;
     if (s === "pendente") return <span className={`${base} bg-yellow-100 text-yellow-800`}>Pendente</span>;
     return <span className={`${base} bg-slate-200 text-slate-700`}>{status || "-"}</span>;
   };
+
+  const badgeEnvio = (enviado) => {
+    const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold";
+    return enviado
+      ? <span className={`${base} bg-emerald-100 text-emerald-700`}>Enviado</span>
+      : <span className={`${base} bg-slate-100 text-slate-700`}>Não enviado</span>;
+  };
+
+  async function toggleEnvio(pedido, novoValor) {
+    try {
+      setSaving(pedido._id);
+      await adminSetPedidoEnviado(pedido._id, novoValor);
+      // atualiza localmente
+      setLista((old) =>
+        old.map((x) => (x._id === pedido._id ? { ...x, enviado: !!novoValor, enviadoEm: novoValor ? new Date().toISOString() : null } : x))
+      );
+    } catch (e) {
+      alert(e.message || "Erro ao atualizar envio");
+    } finally {
+      setSaving(null);
+    }
+  }
 
   return (
     <AdminGuard>
@@ -124,7 +135,8 @@ export default function AdminPedidosPage() {
                       <th className="p-3 text-sm font-semibold text-black">Contato</th>
                       <th className="p-3 text-sm font-semibold text-black">Endereço</th>
                       <th className="p-3 text-sm font-semibold text-black">Total</th>
-                      <th className="p-3 text-sm font-semibold text-black">Status</th>
+                      <th className="p-3 text-sm font-semibold text-black">Pagamento</th>
+                      <th className="p-3 text-sm font-semibold text-black">Envio</th>
                       <th className="p-3 text-sm font-semibold text-black">Criado em</th>
                       <th className="p-3 text-sm font-semibold text-black">Itens</th>
                     </tr>
@@ -139,7 +151,6 @@ export default function AdminPedidosPage() {
                         ? new Date(p.criadoEm).toLocaleString("pt-BR")
                         : "-";
 
-                      // pode vir do backend (admin) como p.usuarioInfo; senão fazemos fallback
                       const u = p.usuarioInfo || {};
                       const nome = u.nome || "(sem nome)";
                       const email = u.email || "";
@@ -157,24 +168,36 @@ export default function AdminPedidosPage() {
                             <div className="whitespace-pre-wrap">{endereco}</div>
                           </td>
                           <td className="p-3 text-black">{total}</td>
-                          <td className="p-3">{badge(p.status)}</td>
+                          <td className="p-3">{badgePagamento(p.status)}</td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              {badgeEnvio(!!p.enviado)}
+                              <label className="inline-flex items-center gap-2 text-sm text-black">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4"
+                                  checked={!!p.enviado}
+                                  disabled={saving === p._id}
+                                  onChange={(e) => toggleEnvio(p, e.target.checked)}
+                                />
+                                {saving === p._id ? "Salvando..." : "Marcar enviado"}
+                              </label>
+                            </div>
+                          </td>
                           <td className="p-3 text-black">{criado}</td>
                           <td className="p-3 text-black">
                             {(p.produtos || []).map((it, idx) => {
                               const pid = toId(it.produtoId);
                               const prod = produtoMap.get(pid) || {};
-                              const img = prod.imagem || null;
-
+                              const img = it.imagem || prod.imagem || null;
                               const nomeProd = it.nome || prod.nome || `Produto ${pid}`;
                               const qtd = it.quantidade || 1;
                               const unit = Number(it.precoUnitario ?? it.preco ?? 0).toLocaleString(
                                 "pt-BR",
                                 { style: "currency", currency: "BRL" }
                               );
-
                               return (
                                 <div key={idx} className="text-sm mb-1 flex items-center gap-2">
-                                  {/* thumb pequena */}
                                   <div className="w-7 h-7 bg-slate-100 rounded overflow-hidden flex-shrink-0 grid place-items-center">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     {img ? (

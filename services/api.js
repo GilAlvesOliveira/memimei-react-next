@@ -195,46 +195,11 @@ export async function adminCreateProduto({
 
   const res = await fetch(`${BASE_URL}/api/products/produtos`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` }, // NÃO definir Content-Type; o browser seta boundary
+    headers: { Authorization: `Bearer ${token}` }, // não setar Content-Type manualmente
     body: fd,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.erro || "Erro ao criar produto");
-  return data;
-}
-
-export async function adminUpdateProduto({
-  id,           // _id do produto
-  nome,
-  descricao,
-  preco,
-  estoque,
-  categoria,
-  cor,
-  modelo,
-  file,        // File | Blob opcional
-}) {
-  const token = getToken();
-  if (!token) throw new Error("Sem token");
-
-  const fd = new FormData();
-  if (nome != null) fd.set("nome", nome);
-  if (descricao != null) fd.set("descricao", descricao);
-  if (preco != null) fd.set("preco", String(preco));
-  if (estoque != null) fd.set("estoque", String(estoque));
-  if (categoria != null) fd.set("categoria", categoria);
-  if (cor != null) fd.set("cor", cor);
-  if (modelo != null) fd.set("modelo", modelo);
-  if (file) fd.set("file", file);
-
-  const url = `${BASE_URL}/api/products/produtos?_id=${encodeURIComponent(id)}`;
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}` }, // sem Content-Type
-    body: fd,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.erro || "Erro ao atualizar produto");
   return data;
 }
 
@@ -248,5 +213,23 @@ export async function adminDeleteProduto(id) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.erro || "Erro ao excluir produto");
+  return data;
+}
+
+/* ========== ADMIN PEDIDOS: marcar enviado ========== */
+export async function adminSetPedidoEnviado(id, enviado) {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  const url = `${BASE_URL}/api/pedidos/pedidos?_id=${encodeURIComponent(id)}`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ enviado: !!enviado }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.erro || "Erro ao atualizar envio");
   return data;
 }
