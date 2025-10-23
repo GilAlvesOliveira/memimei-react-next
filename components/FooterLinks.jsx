@@ -1,9 +1,9 @@
 export default function FooterLinks({
-  instagramUrl = "https://www.instagram.com/giil_oliveira/",
-  whatsappUrl = "https://wa.me/5515996531888",
+  instagramUrl = "https://www.instagram.com/memimei.presentes/",
+  whatsappUrl = "https://wa.me/5515991254042",
   instagramImg = "/imagens/instagramLogo.jpg",
   whatsappImg = "/imagens/whatsappLogo.png",
-  phoneText = "WhatsApp (15) 996531888",
+  phoneText = "WhatsApp (15) 991254042",
 }) {
   return (
     <footer className="h-[20vh] bg-orange-500 px-4 py-3">

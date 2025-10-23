@@ -1,3 +1,4 @@
+// services/api.js
 import { getToken, setAuth } from "./storage";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -200,6 +201,43 @@ export async function adminCreateProduto({
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.erro || "Erro ao criar produto");
+  return data;
+}
+
+/** UPDATE de produto (PUT /api/products/produtos?_id=<id>) */
+export async function adminUpdateProduto({
+  id,
+  nome,
+  descricao,
+  preco,
+  estoque,
+  categoria,
+  cor,
+  modelo,
+  file, // opcional; se não vier, mantém imagem atual
+}) {
+  const token = getToken();
+  if (!token) throw new Error("Sem token");
+  if (!id) throw new Error("ID do produto é obrigatório");
+
+  const fd = new FormData();
+  if (nome != null) fd.set("nome", nome);
+  if (descricao != null) fd.set("descricao", descricao);
+  if (preco != null) fd.set("preco", String(preco));
+  if (estoque != null) fd.set("estoque", String(estoque));
+  if (categoria != null) fd.set("categoria", categoria);
+  if (cor != null) fd.set("cor", cor);
+  if (modelo != null) fd.set("modelo", modelo);
+  if (file) fd.set("file", file);
+
+  const url = `${BASE_URL}/api/products/produtos?_id=${encodeURIComponent(id)}`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` }, // NÃO definir Content-Type
+    body: fd,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.erro || "Erro ao atualizar produto");
   return data;
 }
 

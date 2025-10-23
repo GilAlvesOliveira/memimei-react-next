@@ -1,3 +1,4 @@
+// components/HeaderBar.jsx
 import Link from "next/link";
 
 export default function HeaderBar({
@@ -17,15 +18,20 @@ export default function HeaderBar({
       : avatarFallback;
 
   return (
-    <header className="h-[20vh] flex items-center justify-between bg-black text-white">
+    <header className="h-[20vh] min-h-[72px] flex items-center justify-between bg-black text-white">
       {/* Logo — link para /home */}
       <div className="flex items-center ml-4 sm:ml-[10%]">
-        <Link href="/home" aria-label="Ir para a Home">
+        <Link href="/home" aria-label="Ir para a Home" className="inline-flex items-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logoSrc}
             alt="Logo Memimei"
-            className="h-10 w-auto sm:h-16 cursor-pointer"
+            className="
+              cursor-pointer
+              h-14 w-auto
+              sm:h-24
+              lg:h-28
+            "
           />
         </Link>
       </div>
@@ -44,7 +50,7 @@ export default function HeaderBar({
               </Link>
             )}
 
-            {/* Link Meus Pedidos (somente cliente comum, mas pode mostrar para todos logados se preferir) */}
+            {/* Link Meus Pedidos (somente cliente comum) */}
             {!isAdmin && (
               <Link
                 href="/pedidos"
@@ -66,7 +72,7 @@ export default function HeaderBar({
               <img
                 src="/imagens/carrinhoLaranja.png"
                 alt="Carrinho"
-                className="h-6 w-6 sm:h-8 sm:w-8"
+                className="h-7 w-7 sm:h-9 sm:w-9"
               />
               {cartCount > 0 && (
                 <span
