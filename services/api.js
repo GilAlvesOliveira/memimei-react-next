@@ -181,6 +181,10 @@ export async function adminCreateProduto({
   categoria,
   cor,
   modelo,
+  peso,               // Novo campo
+  largura,            // Novo campo
+  altura,             // Novo campo
+  comprimento,        // Novo campo
   file, // File | Blob opcional
 }) {
   const token = getToken();
@@ -193,11 +197,15 @@ export async function adminCreateProduto({
   fd.set("categoria", categoria);
   fd.set("cor", cor);
   fd.set("modelo", modelo);
+  fd.set("peso", String(peso));               // Adicionando o peso
+  fd.set("largura", String(largura));         // Adicionando a largura
+  fd.set("altura", String(altura));           // Adicionando a altura
+  fd.set("comprimento", String(comprimento)); // Adicionando o comprimento
   if (file) fd.set("file", file);
 
   const res = await fetch(`${BASE_URL}/api/products/produtos`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` }, // não setar Content-Type manualmente
+    headers: { Authorization: `Bearer ${token}` }, // Não setar Content-Type manualmente
     body: fd,
   });
   const data = await res.json().catch(() => ({}));
@@ -215,6 +223,10 @@ export async function adminUpdateProduto({
   categoria,
   cor,
   modelo,
+  peso,               // Novo campo
+  largura,            // Novo campo
+  altura,             // Novo campo
+  comprimento,        // Novo campo
   file, // opcional; se não vier, mantém imagem atual
 }) {
   const token = getToken();
@@ -229,12 +241,16 @@ export async function adminUpdateProduto({
   if (categoria != null) fd.set("categoria", categoria);
   if (cor != null) fd.set("cor", cor);
   if (modelo != null) fd.set("modelo", modelo);
+  if (peso != null) fd.set("peso", String(peso));               // Atualizando peso
+  if (largura != null) fd.set("largura", String(largura));       // Atualizando largura
+  if (altura != null) fd.set("altura", String(altura));          // Atualizando altura
+  if (comprimento != null) fd.set("comprimento", String(comprimento)); // Atualizando comprimento
   if (file) fd.set("file", file);
 
   const url = `${BASE_URL}/api/products/produtos?_id=${encodeURIComponent(id)}`;
   const res = await fetch(url, {
     method: "PUT",
-    headers: { Authorization: `Bearer ${token}` }, // NÃO definir Content-Type
+    headers: { Authorization: `Bearer ${token}` }, // Não definir Content-Type
     body: fd,
   });
   const data = await res.json().catch(() => ({}));

@@ -30,6 +30,10 @@ export default function AdminProdutosPage() {
     categoria: "",
     cor: "",
     modelo: "",
+    peso: "",      // Novo campo
+    largura: "",   // Novo campo
+    altura: "",    // Novo campo
+    comprimento: "", // Novo campo
     file: null,
   });
   const [salvandoNovo, setSalvandoNovo] = useState(false);
@@ -104,6 +108,10 @@ export default function AdminProdutosPage() {
         categoria: novo.categoria,
         cor: novo.cor,
         modelo: novo.modelo,
+        peso: novo.peso,              // Novo campo
+        largura: novo.largura,        // Novo campo
+        altura: novo.altura,          // Novo campo
+        comprimento: novo.comprimento, // Novo campo
         file: novo.file,
       });
       setOk("Produto criado com sucesso");
@@ -115,6 +123,10 @@ export default function AdminProdutosPage() {
         categoria: "",
         cor: "",
         modelo: "",
+        peso: "",      // Novo campo
+        largura: "",   // Novo campo
+        altura: "",    // Novo campo
+        comprimento: "", // Novo campo
         file: null,
       });
       if (fileInputNovoRef.current) fileInputNovoRef.current.value = "";
@@ -135,6 +147,10 @@ export default function AdminProdutosPage() {
       categoria: p.categoria || "",
       cor: p.cor || "",
       modelo: p.modelo || "",
+      peso: p.peso || "",              // Novo campo
+      largura: p.largura || "",        // Novo campo
+      altura: p.altura || "",          // Novo campo
+      comprimento: p.comprimento || "", // Novo campo
       file: null,
       imagemAtual: p.imagem || "",
     });
@@ -162,6 +178,10 @@ export default function AdminProdutosPage() {
         categoria: edit.categoria,
         cor: edit.cor,
         modelo: edit.modelo,
+        peso: edit.peso,              // Novo campo
+        largura: edit.largura,        // Novo campo
+        altura: edit.altura,          // Novo campo
+        comprimento: edit.comprimento, // Novo campo
         file: edit.file || undefined,
       });
       setOk("Produto atualizado com sucesso");
@@ -293,6 +313,38 @@ export default function AdminProdutosPage() {
                   required
                 />
 
+                {/* Novos campos */}
+                <input
+                  className={orangeInput}
+                  placeholder="Peso (em kg)"
+                  value={edit.peso}
+                  onChange={(e) => setEdit({ ...edit, peso: e.target.value })}
+                  required
+                />
+                <input
+                  className={orangeInput}
+                  placeholder="Largura (em cm)"
+                  value={edit.largura}
+                  onChange={(e) => setEdit({ ...edit, largura: e.target.value })}
+                  required
+                />
+                <input
+                  className={orangeInput}
+                  placeholder="Altura (em cm)"
+                  value={edit.altura}
+                  onChange={(e) => setEdit({ ...edit, altura: e.target.value })}
+                  required
+                />
+                <input
+                  className={orangeInput}
+                  placeholder="Comprimento (em cm)"
+                  value={edit.comprimento}
+                  onChange={(e) =>
+                    setEdit({ ...edit, comprimento: e.target.value })
+                  }
+                  required
+                />
+
                 {/* Imagem como botão */}
                 <div className="md:col-span-2">
                   {edit.imagemAtual ? (
@@ -400,6 +452,38 @@ export default function AdminProdutosPage() {
                 value={novo.descricao}
                 onChange={(e) =>
                   setNovo({ ...novo, descricao: e.target.value })
+                }
+                required
+              />
+
+              {/* Novos campos */}
+              <input
+                className={orangeInput}
+                placeholder="Peso (em kg)"
+                value={novo.peso}
+                onChange={(e) => setNovo({ ...novo, peso: e.target.value })}
+                required
+              />
+              <input
+                className={orangeInput}
+                placeholder="Largura (em cm)"
+                value={novo.largura}
+                onChange={(e) => setNovo({ ...novo, largura: e.target.value })}
+                required
+              />
+              <input
+                className={orangeInput}
+                placeholder="Altura (em cm)"
+                value={novo.altura}
+                onChange={(e) => setNovo({ ...novo, altura: e.target.value })}
+                required
+              />
+              <input
+                className={orangeInput}
+                placeholder="Comprimento (em cm)"
+                value={novo.comprimento}
+                onChange={(e) =>
+                  setNovo({ ...novo, comprimento: e.target.value })
                 }
                 required
               />
