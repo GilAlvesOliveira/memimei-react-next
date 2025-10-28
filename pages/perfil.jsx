@@ -14,6 +14,7 @@ export default function PerfilPage() {
   const [file, setFile] = useState(null);
   const [telefone, setTelefone] = useState(""); // novo (opcional)
   const [endereco, setEndereco] = useState(""); // novo (opcional)
+  const [cep, setCep] = useState(""); // novo (opcional)
 
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -39,6 +40,7 @@ export default function PerfilPage() {
         // se backend já devolver:
         setTelefone(freshUser?.telefone || "");
         setEndereco(freshUser?.endereco || "");
+        setCep(freshUser?.cep || ""); // pega o CEP do usuário, se existir
       } catch (e) {
         setErro(e.message || "Erro ao carregar perfil");
       } finally {
@@ -70,6 +72,7 @@ export default function PerfilPage() {
       // estes só serão salvos se o backend aceitar (Opção B):
       if (telefone) fd.set("telefone", telefone);
       if (endereco) fd.set("endereco", endereco);
+      if (cep) fd.set("cep", cep); // envia o CEP para o backend
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/usuario/usuario`, {
         method: "PUT",
@@ -139,6 +142,18 @@ export default function PerfilPage() {
                   rows={3}
                   value={endereco}
                   onChange={(e) => setEndereco(e.target.value)}
+                />
+              </div>
+
+              {/* Novo campo de CEP */}
+              <div>
+                <label className="block text-sm font-semibold text-black mb-1">CEP (opcional)</label>
+                <input
+                  type="text"
+                  placeholder="CEP (ex.: 18072-060)"
+                  className="w-full p-3 border border-orange-500 rounded-md text-orange-600"
+                  value={cep}
+                  onChange={(e) => setCep(e.target.value)}
                 />
               </div>
 
