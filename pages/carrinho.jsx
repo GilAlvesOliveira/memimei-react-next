@@ -80,8 +80,15 @@ export default function CarrinhoPage() {
   // “Retomar pagamento” (quando existe pedido pendente salvo)
   const [resumePending, setResumePending] = useState(null); // { id, total }
 
+  // Frete (novos estados)
+  const [freteOptions, setFreteOptions] = useState([]);
+  const [freteSelecionado, setFreteSelecionado] = useState(null);
+  const [valorFreteSelecionado, setValorFreteSelecionado] = useState(0); // apenas o valor do frete
+
   useEffect(() => {
+    console.log("[Carrinho] useEffect inicial");
     const token = getToken();
+    console.log("[Carrinho] token:", token);
     if (!token) {
       setPostLoginAction({ type: "redirect", redirect: "/carrinho" });
       router.push("/login");
@@ -92,22 +99,27 @@ export default function CarrinhoPage() {
       try {
         try {
           const freshUser = await getUsuario();
+          console.log("[Carrinho] getUsuario() OK:", freshUser);
           setUser(freshUser);
-        } catch {
+        } catch (e) {
+          console.warn("[Carrinho] getUsuario() falhou, fallback storage:", e);
           setUser(getStoredUser() || null);
         }
         await carregarCarrinho();
 
         // Verifica se havia um pedido pendente salvo e se ainda está pendente no backend
         const saved = readPendingOrder();
+        console.log("[Carrinho] saved pending order:", saved);
         if (saved?.id) {
           const pedidos = await getPedidos().catch(() => []);
+          console.log("[Carrinho] pedidos (para validar pendente):", pedidos);
           const achado = (pedidos || []).find((p) => {
             const idStr = (p?._id && (p._id.$oid || p._id)) || p?._id || "";
             return String(idStr) === String(saved.id);
           });
           if (achado) {
             const status = String(achado.status || "").toLowerCase();
+            console.log("[Carrinho] achado pendente status:", status, achado);
             if (status === "aprovado") {
               // aprovado enquanto estávamos fora
               clearPendingOrder();
@@ -125,6 +137,7 @@ export default function CarrinhoPage() {
           }
         }
       } catch (e) {
+        console.error("[Carrinho] erro no boot:", e);
         setErro(e.message || "Erro ao carregar carrinho");
       }
     })();
@@ -142,9 +155,12 @@ export default function CarrinhoPage() {
     try {
       setLoading(true);
       setErro("");
+      console.log("[Carrinho] carregarCarrinho()");
       const data = await getCart();
+      console.log("[Carrinho] getCart() ->", data);
       setItens(Array.isArray(data) ? data : []);
     } catch (e) {
+      console.error("[Carrinho] carregarCarrinho() erro:", e);
       setErro(e.message || "Erro ao carregar carrinho");
     } finally {
       setLoading(false);
@@ -152,21 +168,26 @@ export default function CarrinhoPage() {
   }
 
   const total = useMemo(() => {
-    return (itens || []).reduce((acc, item) => {
+    const t = (itens || []).reduce((acc, item) => {
       const preco = Number(item?.preco ?? item?.produto?.preco ?? 0) || 0;
       const qtd = Number(item?.quantidade ?? 1) || 1;
       return acc + preco * qtd;
     }, 0);
+    console.log("[Carrinho] total produtos (sem frete):", t);
+    return t;
   }, [itens]);
 
   const cartCount = useMemo(() => {
-    return (itens || []).reduce(
+    const c = (itens || []).reduce(
       (acc, it) => acc + (Number(it?.quantidade ?? 1) || 1),
       0
     );
+    console.log("[Carrinho] cartCount:", c);
+    return c;
   }, [itens]);
 
   const handleLogout = () => {
+    console.log("[Carrinho] handleLogout()");
     clearAuth();
     setUser(null);
     router.push("/login");
@@ -174,6 +195,7 @@ export default function CarrinhoPage() {
 
   async function handleDecrement(item) {
     const produtoId = item?.produtoId || item?.produto?._id;
+    console.log("[Carrinho] handleDecrement()", { item, produtoId });
     if (!produtoId) return;
 
     try {
@@ -181,6 +203,7 @@ export default function CarrinhoPage() {
       await decrementCartItem(produtoId);
       await carregarCarrinho();
     } catch (e) {
+      console.error("[Carrinho] handleDecrement() erro:", e);
       setErro(e.message || "Não foi possível diminuir a quantidade");
     } finally {
       setBusyId(null);
@@ -189,6 +212,7 @@ export default function CarrinhoPage() {
 
   // ==== POLLING ====
   function startPollingStatus(pedidoIdCriado) {
+    console.log("[Carrinho] startPollingStatus()", pedidoIdCriado);
     if (pollTimer.current) {
       clearInterval(pollTimer.current);
       pollTimer.current = null;
@@ -205,6 +229,7 @@ export default function CarrinhoPage() {
     pollTimer.current = setInterval(async () => {
       try {
         attempts += 1;
+        console.log("[Carrinho] polling tentativa", attempts);
         const pedidos = await getPedidos();
         const achado = (pedidos || []).find((p) => {
           const idStr = (p?._id && (p._id.$oid || p._id)) || p?._id || "";
@@ -212,6 +237,7 @@ export default function CarrinhoPage() {
         });
 
         if (achado && String(achado.status).toLowerCase() === "aprovado") {
+          console.log("[Carrinho] pagamento aprovado!", achado);
           clearInterval(pollTimer.current);
           pollTimer.current = null;
           setWaitingPay(false);
@@ -220,11 +246,12 @@ export default function CarrinhoPage() {
           router.push(`/sucesso?pedido=${encodeURIComponent(pedidoIdCriado)}`);
           return;
         }
-      } catch {
-        // ignora erros intermitentes
+      } catch (err) {
+        console.warn("[Carrinho] polling erro transitório:", err);
       }
 
       if (attempts >= MAX_ATTEMPTS) {
+        console.warn("[Carrinho] polling timeout");
         clearInterval(pollTimer.current);
         pollTimer.current = null;
         setWaitingPay(false);
@@ -243,23 +270,31 @@ export default function CarrinhoPage() {
       setFinalizando(true);
 
       // 1) Cria o pedido (backend limpa carrinho)
+      console.log("[Carrinho] handleCheckout() - criando pedido");
       const { pedidoId: idGerado, total: totalPedido } = await createOrder();
+      console.log("[Carrinho] createOrder() ->", { idGerado, totalPedido });
       setPedidoId(idGerado);
       savePendingOrder({ id: idGerado, total: totalPedido || total });
       setItens([]); // reflete esvaziamento
 
-      // 2) Gera preferência
+      // 2) Calcula total com frete
+      const totalComFrete = Number(total || 0) + Number(valorFreteSelecionado || 0);
+      console.log("[Carrinho] total produtos:", total, "frete:", valorFreteSelecionado, "totalComFrete:", totalComFrete);
+
+      // 3) Gera preferência
       const pref = await createPreference({
         pedidoId: idGerado,
-        total: totalPedido || total,
+        total: totalComFrete, // soma de produtos + frete
       });
+      console.log("[Carrinho] createPreference() ->", pref);
 
-      // 3) Abre em NOVA ABA (pré-abre para evitar bloqueio)
+      // 4) Abre em NOVA ABA (pré-abre para evitar bloqueio)
       openInNewTabSafe(pref.initPoint);
 
-      // 4) Começa polling
+      // 5) Começa polling
       startPollingStatus(idGerado);
     } catch (e) {
+      console.error("[Carrinho] handleCheckout() erro:", e);
       setErro(e.message || "Não foi possível iniciar o pagamento");
     } finally {
       setFinalizando(false);
@@ -270,6 +305,7 @@ export default function CarrinhoPage() {
     try {
       setErro("");
       setPollErr("");
+      console.log("[Carrinho] handleRegenerate()");
       // tenta pegar o pendente mais confiável
       let pend = resumePending || readPendingOrder() || null;
 
@@ -290,6 +326,7 @@ export default function CarrinhoPage() {
       }
 
       if (!pend?.id) {
+        console.warn("[Carrinho] handleRegenerate() - nenhum pendente");
         setErro("Nenhum pedido pendente para gerar.");
         return;
       }
@@ -301,12 +338,14 @@ export default function CarrinhoPage() {
         return String(idStr) === String(pend.id);
       });
       const totalToUse = found?.total ?? pend.total ?? total;
+      console.log("[Carrinho] handleRegenerate() totalToUse:", totalToUse, { found, pend });
 
       // cria nova preferência para o MESMO pedido
       const pref = await createPreference({
         pedidoId: pend.id,
         total: Number(totalToUse || 0),
       });
+      console.log("[Carrinho] handleRegenerate() createPreference ->", pref);
 
       // abre em nova aba
       openInNewTabSafe(pref.initPoint);
@@ -317,11 +356,13 @@ export default function CarrinhoPage() {
       startPollingStatus(pend.id);
       setResumePending({ id: pend.id, total: Number(totalToUse || 0) });
     } catch (e) {
+      console.error("[Carrinho] handleRegenerate() erro:", e);
       setErro(e.message || "Não foi possível gerar o QR Code novamente");
     }
   }
 
   function handleDiscardPending() {
+    console.log("[Carrinho] handleDiscardPending()");
     clearPendingOrder();
     setResumePending(null);
     setPedidoId(null);
@@ -329,6 +370,93 @@ export default function CarrinhoPage() {
     setPollMsg("");
     setWaitingPay(false);
   }
+
+  // Função para calcular as dimensões e peso do produto (maior comp/larg, soma altura/peso)
+  function calcularDimensoesEPeso(carrinho) {
+    let totalHeight = 0;
+    let totalWidth = 0;
+    let totalLength = 0;
+    let totalWeight = 0;
+
+    carrinho.forEach(item => {
+      const produto = item?.produto || {};
+      const quantidade = Number(item?.quantidade || 1);
+      const altura = Number(produto?.altura || 0);
+      const largura = Number(produto?.largura || 0);
+      const comprimento = Number(produto?.comprimento || 0);
+      const peso = Number(produto?.peso || 0);
+
+      totalHeight += altura * quantidade;           // soma alturas
+      totalWidth = Math.max(totalWidth, largura);   // maior largura
+      totalLength = Math.max(totalLength, comprimento); // maior comprimento
+      totalWeight += peso * quantidade;             // soma pesos
+    });
+
+    const res = {
+      height: totalHeight,
+      width: totalWidth,
+      length: totalLength,
+      weight: totalWeight
+    };
+    console.log("[Carrinho] calcularDimensoesEPeso ->", res);
+    return res;
+  }
+
+  async function calcularFrete() {
+    try {
+      console.log("[Carrinho] calcularFrete()");
+      const carrinho = itens;
+      const { height, width, length, weight } = calcularDimensoesEPeso(carrinho);
+      const cepDestino = (user?.cep || "").replace(/\s/g, "");
+      if (!cepDestino) {
+        setErro("CEP do usuário não encontrado.");
+        return;
+      }
+
+      // IMPORTANTE: a rota pública do MelhorEnvio calculator é GET (sem header Auth) e está sujeita a CORS/políticas deles.
+      // Se der CORS no navegador, use seu proxy backend. Aqui usamos direto pois você sinalizou que funciona aí.
+      const url = `https://www.melhorenvio.com.br/api/v2/calculator?from=18072-060&to=${cepDestino}&width=${width}&height=${height}&length=${length}&weight=${weight}&insurance_value=0`;
+      console.log("[Carrinho] URL calcular frete:", url);
+
+      const response = await fetch(url);
+      console.log("[Carrinho] resposta calcular frete status:", response.status);
+      if (!response.ok) {
+        let errorData = {};
+        try {
+          errorData = await response.json();
+        } catch {}
+        console.error("[Carrinho] erro calcular frete:", errorData);
+        setErro("Erro ao calcular o frete.");
+        return;
+      }
+
+      const data = await response.json();
+      console.log("[Carrinho] opções de frete recebidas:", data);
+      // filtra somente opções sem erro
+      const ok = Array.isArray(data) ? data.filter(o => !o.error) : [];
+      setFreteOptions(ok);
+      if (ok.length === 0) {
+        console.warn("[Carrinho] nenhuma opção de frete válida para o trecho/dimensões.");
+      }
+    } catch (error) {
+      console.error("[Carrinho] calcularFrete() exception:", error);
+      setErro("Erro ao calcular o frete.");
+    }
+  }
+
+  function selecionarFrete(option) {
+    console.log("[Carrinho] selecionarFrete()", option);
+    setFreteSelecionado(option);
+    const valorFrete = Number(option?.price || 0);
+    setValorFreteSelecionado(valorFrete);
+    console.log("[Carrinho] valorFreteSelecionado:", valorFrete);
+  }
+
+  const totalComFreteExibicao = useMemo(() => {
+    const v = Number(total || 0) + Number(valorFreteSelecionado || 0);
+    console.log("[Carrinho] totalComFreteExibicao:", v);
+    return v;
+  }, [total, valorFreteSelecionado]);
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -460,12 +588,70 @@ export default function CarrinhoPage() {
             })}
           </div>
 
+          {/* Botão para calcular frete */}
+          <div className="mt-4">
+            <button
+              onClick={calcularFrete}
+              className="px-4 py-2 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Calcular Frete
+            </button>
+          </div>
+
+          {/* Opções de frete retornadas */}
+          {freteOptions.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-lg font-semibold text-black">Escolha uma opção de frete</h2>
+              <div className="grid grid-cols-1 gap-3">
+                {freteOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() => selecionarFrete(option)}
+                    className={`flex gap-3 p-3 border rounded-lg bg-white ${freteSelecionado?.id === option.id ? "ring-2 ring-orange-600" : ""}`}
+                  >
+                    <div>
+                      <img
+                        src={option.company?.picture}
+                        alt={option.name}
+                        className="w-12 h-12 object-contain"
+                      />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="font-semibold text-black">
+                        {option.name} {option.company?.name ? `· ${option.company.name}` : ""}
+                      </div>
+                      <div className="text-sm text-black">
+                        {option.price && (
+                          <>
+                            Preço:{" "}
+                            <span className="font-semibold">
+                              {Number(option.price).toLocaleString("pt-BR", {
+                                style: "currency",
+                                currency: "BRL",
+                              })}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <div className="text-sm text-black">
+                        Prazo de entrega: {option.delivery_time} {option.delivery_time === 1 ? "dia útil" : "dias úteis"}
+                      </div>
+                      {option.error && (
+                        <div className="text-sm text-red-600">Erro: {option.error}</div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Total + CTAs */}
           {!loading && !erro && (itens.length > 0 || waitingPay || resumePending?.id) && (
             <div className="mt-6 flex items-center justify-between">
               <div className="text-lg font-bold text-black">
                 Total:{" "}
-                {total.toLocaleString("pt-BR", {
+                {totalComFreteExibicao.toLocaleString("pt-BR", {
                   style: "currency",
                   currency: "BRL",
                 })}
@@ -486,7 +672,7 @@ export default function CarrinhoPage() {
                 <button
                   type="button"
                   onClick={handleCheckout}
-                  disabled={finalizando || waitingPay || itens.length === 0}
+                  disabled={finalizando || waitingPay || itens.length === 0 || !freteSelecionado}
                   className="px-4 py-2 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {finalizando
