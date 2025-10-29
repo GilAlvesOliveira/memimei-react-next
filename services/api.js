@@ -131,17 +131,24 @@ export async function decrementCartItem(produtoId) {
 }
 
 /* ========== PEDIDOS + MERCADO PAGO ========== */
-export async function createOrder() {
+
+export async function createOrder(totalComFrete, frete) {
   const token = getToken();
   if (!token) throw new Error("Sem token");
   const res = await fetch(`${BASE_URL}/api/pedidos/pedidos`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ total: totalComFrete, frete: frete }),  // Envia tanto o total quanto o frete
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.erro || "Erro ao criar pedido");
-  // data = { msg, pedidoId, total }
-  return data;
+  if (!res.ok) {
+    throw new Error(data?.erro || "Erro ao criar pedido");
+  }
+
+  return data; // data = { msg, pedidoId, total }
 }
 
 export async function createPreference({ pedidoId, total }) {

@@ -86,9 +86,7 @@ export default function CarrinhoPage() {
   const [valorFreteSelecionado, setValorFreteSelecionado] = useState(0); // apenas o valor do frete
 
   useEffect(() => {
-    console.log("[Carrinho] useEffect inicial");
     const token = getToken();
-    console.log("[Carrinho] token:", token);
     if (!token) {
       setPostLoginAction({ type: "redirect", redirect: "/carrinho" });
       router.push("/login");
@@ -99,7 +97,6 @@ export default function CarrinhoPage() {
       try {
         try {
           const freshUser = await getUsuario();
-          console.log("[Carrinho] getUsuario() OK:", freshUser);
           setUser(freshUser);
         } catch (e) {
           console.warn("[Carrinho] getUsuario() falhou, fallback storage:", e);
@@ -109,17 +106,14 @@ export default function CarrinhoPage() {
 
         // Verifica se havia um pedido pendente salvo e se ainda está pendente no backend
         const saved = readPendingOrder();
-        console.log("[Carrinho] saved pending order:", saved);
         if (saved?.id) {
           const pedidos = await getPedidos().catch(() => []);
-          console.log("[Carrinho] pedidos (para validar pendente):", pedidos);
           const achado = (pedidos || []).find((p) => {
             const idStr = (p?._id && (p._id.$oid || p._id)) || p?._id || "";
             return String(idStr) === String(saved.id);
           });
           if (achado) {
             const status = String(achado.status || "").toLowerCase();
-            console.log("[Carrinho] achado pendente status:", status, achado);
             if (status === "aprovado") {
               // aprovado enquanto estávamos fora
               clearPendingOrder();
@@ -155,9 +149,7 @@ export default function CarrinhoPage() {
     try {
       setLoading(true);
       setErro("");
-      console.log("[Carrinho] carregarCarrinho()");
       const data = await getCart();
-      console.log("[Carrinho] getCart() ->", data);
       setItens(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("[Carrinho] carregarCarrinho() erro:", e);
@@ -173,7 +165,6 @@ export default function CarrinhoPage() {
       const qtd = Number(item?.quantidade ?? 1) || 1;
       return acc + preco * qtd;
     }, 0);
-    console.log("[Carrinho] total produtos (sem frete):", t);
     return t;
   }, [itens]);
 
@@ -182,12 +173,10 @@ export default function CarrinhoPage() {
       (acc, it) => acc + (Number(it?.quantidade ?? 1) || 1),
       0
     );
-    console.log("[Carrinho] cartCount:", c);
     return c;
   }, [itens]);
 
   const handleLogout = () => {
-    console.log("[Carrinho] handleLogout()");
     clearAuth();
     setUser(null);
     router.push("/login");
@@ -195,7 +184,6 @@ export default function CarrinhoPage() {
 
   async function handleDecrement(item) {
     const produtoId = item?.produtoId || item?.produto?._id;
-    console.log("[Carrinho] handleDecrement()", { item, produtoId });
     if (!produtoId) return;
 
     try {
@@ -212,7 +200,6 @@ export default function CarrinhoPage() {
 
   // ==== POLLING ====
   function startPollingStatus(pedidoIdCriado) {
-    console.log("[Carrinho] startPollingStatus()", pedidoIdCriado);
     if (pollTimer.current) {
       clearInterval(pollTimer.current);
       pollTimer.current = null;
@@ -229,7 +216,6 @@ export default function CarrinhoPage() {
     pollTimer.current = setInterval(async () => {
       try {
         attempts += 1;
-        console.log("[Carrinho] polling tentativa", attempts);
         const pedidos = await getPedidos();
         const achado = (pedidos || []).find((p) => {
           const idStr = (p?._id && (p._id.$oid || p._id)) || p?._id || "";
@@ -237,7 +223,6 @@ export default function CarrinhoPage() {
         });
 
         if (achado && String(achado.status).toLowerCase() === "aprovado") {
-          console.log("[Carrinho] pagamento aprovado!", achado);
           clearInterval(pollTimer.current);
           pollTimer.current = null;
           setWaitingPay(false);
@@ -262,50 +247,42 @@ export default function CarrinhoPage() {
     }, 5000);
   }
 
-  async function handleCheckout() {
-    try {
-      setErro("");
-      setPollErr("");
-      setPollMsg("");
-      setFinalizando(true);
+async function handleCheckout() {
+  try {
+    setErro("");
+    setPollErr("");
+    setPollMsg("");
+    setFinalizando(true);
 
-      // 1) Cria o pedido (backend limpa carrinho)
-      console.log("[Carrinho] handleCheckout() - criando pedido");
-      const { pedidoId: idGerado, total: totalPedido } = await createOrder();
-      console.log("[Carrinho] createOrder() ->", { idGerado, totalPedido });
-      setPedidoId(idGerado);
-      savePendingOrder({ id: idGerado, total: totalPedido || total });
-      setItens([]); // reflete esvaziamento
+    const totalComFreteNumerico = Number(totalComFreteExibicao);
 
-      // 2) Calcula total com frete
-      const totalComFrete = Number(total || 0) + Number(valorFreteSelecionado || 0);
-      console.log("[Carrinho] total produtos:", total, "frete:", valorFreteSelecionado, "totalComFrete:", totalComFrete);
+    const { pedidoId: idGerado, totalPedido, frete } = await createOrder(totalComFreteNumerico, valorFreteSelecionado);
+    setPedidoId(idGerado);
 
-      // 3) Gera preferência
-      const pref = await createPreference({
-        pedidoId: idGerado,
-        total: totalComFrete, // soma de produtos + frete
-      });
-      console.log("[Carrinho] createPreference() ->", pref);
+    savePendingOrder({ id: idGerado, total: totalPedido || totalComFreteNumerico });
 
-      // 4) Abre em NOVA ABA (pré-abre para evitar bloqueio)
-      openInNewTabSafe(pref.initPoint);
+    setItens([]); 
 
-      // 5) Começa polling
-      startPollingStatus(idGerado);
-    } catch (e) {
-      console.error("[Carrinho] handleCheckout() erro:", e);
-      setErro(e.message || "Não foi possível iniciar o pagamento");
-    } finally {
-      setFinalizando(false);
-    }
+    const pref = await createPreference({
+      pedidoId: idGerado,
+      total: totalComFreteNumerico, // total com frete
+    });
+
+    openInNewTabSafe(pref.initPoint);
+
+    startPollingStatus(idGerado);
+  } catch (e) {
+    console.error("[Carrinho] handleCheckout() erro:", e);
+    setErro(e.message || "Não foi possível iniciar o pagamento");
+  } finally {
+    setFinalizando(false);
   }
+}
 
   async function handleRegenerate() {
     try {
       setErro("");
       setPollErr("");
-      console.log("[Carrinho] handleRegenerate()");
       // tenta pegar o pendente mais confiável
       let pend = resumePending || readPendingOrder() || null;
 
@@ -338,14 +315,12 @@ export default function CarrinhoPage() {
         return String(idStr) === String(pend.id);
       });
       const totalToUse = found?.total ?? pend.total ?? total;
-      console.log("[Carrinho] handleRegenerate() totalToUse:", totalToUse, { found, pend });
 
       // cria nova preferência para o MESMO pedido
       const pref = await createPreference({
         pedidoId: pend.id,
         total: Number(totalToUse || 0),
       });
-      console.log("[Carrinho] handleRegenerate() createPreference ->", pref);
 
       // abre em nova aba
       openInNewTabSafe(pref.initPoint);
@@ -362,7 +337,6 @@ export default function CarrinhoPage() {
   }
 
   function handleDiscardPending() {
-    console.log("[Carrinho] handleDiscardPending()");
     clearPendingOrder();
     setResumePending(null);
     setPedidoId(null);
@@ -398,13 +372,11 @@ export default function CarrinhoPage() {
       length: totalLength,
       weight: totalWeight
     };
-    console.log("[Carrinho] calcularDimensoesEPeso ->", res);
     return res;
   }
 
   async function calcularFrete() {
     try {
-      console.log("[Carrinho] calcularFrete()");
       const carrinho = itens;
       const { height, width, length, weight } = calcularDimensoesEPeso(carrinho);
       const cepDestino = (user?.cep || "").replace(/\s/g, "");
@@ -416,10 +388,8 @@ export default function CarrinhoPage() {
       // IMPORTANTE: a rota pública do MelhorEnvio calculator é GET (sem header Auth) e está sujeita a CORS/políticas deles.
       // Se der CORS no navegador, use seu proxy backend. Aqui usamos direto pois você sinalizou que funciona aí.
       const url = `https://www.melhorenvio.com.br/api/v2/calculator?from=18072-060&to=${cepDestino}&width=${width}&height=${height}&length=${length}&weight=${weight}&insurance_value=0`;
-      console.log("[Carrinho] URL calcular frete:", url);
 
       const response = await fetch(url);
-      console.log("[Carrinho] resposta calcular frete status:", response.status);
       if (!response.ok) {
         let errorData = {};
         try {
@@ -431,7 +401,6 @@ export default function CarrinhoPage() {
       }
 
       const data = await response.json();
-      console.log("[Carrinho] opções de frete recebidas:", data);
       // filtra somente opções sem erro
       const ok = Array.isArray(data) ? data.filter(o => !o.error) : [];
       setFreteOptions(ok);
@@ -445,16 +414,13 @@ export default function CarrinhoPage() {
   }
 
   function selecionarFrete(option) {
-    console.log("[Carrinho] selecionarFrete()", option);
     setFreteSelecionado(option);
     const valorFrete = Number(option?.price || 0);
     setValorFreteSelecionado(valorFrete);
-    console.log("[Carrinho] valorFreteSelecionado:", valorFrete);
   }
 
   const totalComFreteExibicao = useMemo(() => {
     const v = Number(total || 0) + Number(valorFreteSelecionado || 0);
-    console.log("[Carrinho] totalComFreteExibicao:", v);
     return v;
   }, [total, valorFreteSelecionado]);
 
