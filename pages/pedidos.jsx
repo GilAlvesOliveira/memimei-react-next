@@ -132,6 +132,10 @@ export default function MeusPedidosPage() {
                 style: "currency",
                 currency: "BRL",
               });
+              const freteBRL = Number(p.frete || 0).toLocaleString("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              });
               const criado =
                 p.criadoEm ? new Date(p.criadoEm).toLocaleString("pt-BR") : "-";
 
@@ -150,6 +154,11 @@ export default function MeusPedidosPage() {
                         <StatusBadge status={p.status} />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Exibindo o valor do frete */}
+                  <div className="p-3 text-sm text-slate-700">
+                    <strong>Frete:</strong> {freteBRL}
                   </div>
 
                   {/* Itens com imagem */}
