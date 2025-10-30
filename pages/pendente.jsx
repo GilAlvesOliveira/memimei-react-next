@@ -64,7 +64,7 @@ export default function PendentePage() {
 
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Link
-                    href="/meus-pedidos"
+                    href="/pedidos"
                     className="text-center w-full py-3 rounded-lg font-semibold bg-[#FB923C] text-black hover:brightness-95 transition"
                   >
                     Ver meus pedidos

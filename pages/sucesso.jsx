@@ -135,7 +135,7 @@ export default function SucessoPage() {
 
           <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              href="/meus-pedidos"
+              href="/pedidos"
               className="px-5 py-2.5 rounded-lg bg-green-500 text-white font-semibold hover:bg-green-600 transition"
             >
               Ver meus pedidos
