@@ -92,4 +92,4 @@ export default function ProductCard({ produto, onAdd, onBuy }) {
       </div>
     </div>
   );
-}
+} 
