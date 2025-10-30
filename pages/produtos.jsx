@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import HeaderBar from "../components/HeaderBar";
 import FooterLinks from "../components/FooterLinks";
 import ProductCard from "../components/ProductCard";
-import brands from "../lib/brands";
 import { getUsuario, getProdutos, addToCart, getCart } from "../services/api";
 import {
   getStoredUser,
