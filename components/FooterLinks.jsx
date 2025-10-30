@@ -27,6 +27,15 @@ export default function FooterLinks({
           <img src={whatsappImg} alt="WhatsApp" className="h-6 w-6" />
           <span className="text-base font-semibold text-black">{phoneText}</span>
         </a>
+
+        <a> 
+          <span className="text-base font-semibold text-black">📍 Av. Vinícius de Moraes 1058 Sala 1 Pq. São Bento</span>
+        </a>
+        
+        <a> 
+        <span className="text-base font-semibold text-black">📅 Seg á Sáb 9:00h ás 18:00h</span> 
+        </a>
+
       </div>
     </footer>
   );

@@ -387,7 +387,7 @@ async function handleCheckout() {
 
       // IMPORTANTE: a rota pública do MelhorEnvio calculator é GET (sem header Auth) e está sujeita a CORS/políticas deles.
       // Se der CORS no navegador, use seu proxy backend. Aqui usamos direto pois você sinalizou que funciona aí.
-      const url = `https://www.melhorenvio.com.br/api/v2/calculator?from=18072-060&to=${cepDestino}&width=${width}&height=${height}&length=${length}&weight=${weight}&insurance_value=0`;
+      const url = `${process.env.NEXT_PUBLIC_URL_MELHOR_ENVIO}calculator?from=18072-060&to=${cepDestino}&width=${width}&height=${height}&length=${length}&weight=${weight}&insurance_value=0`;
 
       const response = await fetch(url);
       if (!response.ok) {
