@@ -60,7 +60,7 @@ export default function CadastroPage() {
       if (form.file) formData.append("file", form.file);
 
       // Fazendo a chamada à API para o endpoint correto
-      const res = await fetch("https://me-mimei-teste-case-shop.vercel.app/api/auth/register", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, {
         method: "POST",
         body: formData,
       });
